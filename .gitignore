@@ -1,0 +1,18 @@
+# Build / Temp folders
+.pio/
+build/
+temp/
+*/.vscode/
+*.log
+*.tmp
+*.DS_Store
+Thumbs.db
+
+# Firmware artifacts
+*.bin
+*.elf
+*.map
+
+# Python cache
+__pycache__/
+*.pyc

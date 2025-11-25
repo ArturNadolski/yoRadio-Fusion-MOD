@@ -1,0 +1,975 @@
+//Módosítva v0.9.710 "vol_step" by Tamás Várai
+#include "Arduino.h"
+#include "options.h"
+#include "WiFi.h"
+#include "time.h"
+#include "config.h"
+#include "display.h"
+#include "player.h"
+#include "network.h"
+#include "netserver.h"
+#include "timekeeper.h"
+#include "../pluginsManager/pluginsManager.h"
+#include "../displays/dspcore.h"
+#include "../displays/widgets/widgets.h"
+#include "../displays/widgets/pages.h"
+#include "../displays/tools/l10n.h"
+
+Display display;
+#ifdef USE_NEXTION
+#include "../displays/nextion.h"
+Nextion nextion;
+#endif
+
+#ifndef CORE_STACK_SIZE
+  #define CORE_STACK_SIZE  1024*8
+#endif
+#ifndef DSP_TASK_PRIORITY
+  #define DSP_TASK_PRIORITY  2
+#endif
+#ifndef DSP_TASK_CORE_ID
+  #define DSP_TASK_CORE_ID  0
+#endif
+#ifndef DSP_TASK_DELAY
+  #define DSP_TASK_DELAY pdMS_TO_TICKS(10) // cap for 50 fps
+#endif
+
+#define DSP_QUEUE_TICKS 0
+
+#ifndef DSQ_SEND_DELAY
+  //#define DSQ_SEND_DELAY portMAX_DELAY
+  #define DSQ_SEND_DELAY  pdMS_TO_TICKS(200)
+#endif
+
+#ifndef SAVER_Y_MIN
+#define SAVER_Y_MIN TFT_FRAMEWDT
+#endif
+
+QueueHandle_t displayQueue;
+
+static void loopDspTask(void * pvParameters){
+  while(true){
+  #ifndef DUMMYDISPLAY
+    if(displayQueue==NULL) break;
+    if(timekeeper.loop0()){
+      display.loop();
+    #ifndef NETSERVER_LOOP1
+      netserver.loop();
+    #endif
+    }
+  #else
+    timekeeper.loop0();
+    #ifndef NETSERVER_LOOP1
+      netserver.loop();
+    #endif
+  #endif
+    vTaskDelay(DSP_TASK_DELAY);
+  }
+  vTaskDelete( NULL );
+}
+
+void Display::_createDspTask(){
+  xTaskCreatePinnedToCore(loopDspTask, "DspTask", CORE_STACK_SIZE,  NULL,  DSP_TASK_PRIORITY, NULL, DSP_TASK_CORE_ID);
+}
+
+#ifndef DUMMYDISPLAY
+//============================================================================================================================
+DspCore dsp;
+
+Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
+
+#if !((DSP_MODEL==DSP_ST7735 && DTYPE==INITR_BLACKTAB) || DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7796 || DSP_MODEL==DSP_ILI9488 \
+ || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_ILI9341 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170 || DSP_MODEL==DSP_NV3041A)
+  #undef  BITRATE_FULL
+  #define BITRATE_FULL     false
+#endif
+
+
+void returnPlayer(){
+  display.putRequest(NEWMODE, PLAYER);
+}
+
+Display::~Display() {
+  delete _pager;
+  delete _footer;
+  delete _plwidget;
+  delete _nums;
+  delete _clock;
+  delete _date;
+  delete _meta;
+  delete _title1;
+  delete _title2;
+  delete _plcurrent;
+}
+
+void Display::init() {
+  Serial.print("##[BOOT]#\tdisplay.init\t");
+#ifdef USE_NEXTION
+  nextion.begin();
+#endif
+#if LIGHT_SENSOR!=255
+  analogSetAttenuation(ADC_0db);
+#endif
+  _bootStep = 0;
+  dsp.initDisplay();
+  displayQueue=NULL;
+  displayQueue = xQueueCreate( 5, sizeof( requestParams_t ) );
+  while(displayQueue==NULL){;}
+  _createDspTask();
+  while(!_bootStep==0) { delay(10); }
+  //_pager.begin();
+  //_bootScreen();
+  _pager = new Pager();
+  _footer = new Page();
+  _plwidget = new PlayListWidget();
+  _nums = new NumWidget();
+  _clock = new ClockWidget();
+  _date = new DateWidget();
+  _meta = new ScrollWidget();
+  _title1 = new ScrollWidget();
+  _plcurrent = new ScrollWidget();
+  Serial.println("done");
+}
+
+uint16_t Display::width(){ return dsp.width(); }
+uint16_t Display::height(){ return dsp.height(); }
+#if TIME_SIZE>19
+  #if DSP_MODEL==DSP_SSD1322
+    #define BOOT_PRG_COLOR    WHITE
+    #define BOOT_TXT_COLOR    WHITE
+    #define PINK              WHITE
+  #elif DSP_MODEL==DSP_SSD1327
+    #define BOOT_PRG_COLOR    0x07
+    #define BOOT_TXT_COLOR    0x3f
+    #define PINK              0x02
+  #else
+    #define BOOT_PRG_COLOR    0xE68B
+    #define BOOT_TXT_COLOR    0xFFFF
+    #define PINK              0xF97F
+  #endif
+#endif
+
+void Display::_bootScreen(){
+  _boot = new Page();
+  _boot->addWidget(new ProgressWidget(bootWdtConf, bootPrgConf, BOOT_PRG_COLOR, 0));
+  _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(bootstrConf, 50, true, BOOT_TXT_COLOR, 0));
+  _pager->addPage(_boot);
+  _pager->setPage(_boot, true);
+  dsp.drawLogo(bootLogoTop);
+  _bootStep = 1;
+}
+
+void Display::_buildPager(){
+  _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
+  _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
+  _clock->init(getclockConf(), 0, 0);
+  _date->init(getDateConf(), config.theme.date, config.theme.background);
+  _date->setNamedayEnabled(config.store.showNameday);
+  #if DSP_MODEL==DSP_NOKIA5110
+    _plcurrent->init("*", playlistConf, 0, 1);
+  #else
+    _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
+  #endif
+  _plwidget->init(_plcurrent);
+  #if !defined(DSP_LCD)
+    _plcurrent->moveTo({TFT_FRAMEWDT, (uint16_t)(_plwidget->currentTop()), (int16_t)playlistConf.width});
+  #endif
+  #ifndef HIDE_TITLE2
+    _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
+  #endif
+  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
+    _plbackground = new FillWidget(playlBGConf, config.theme.plcurrentfill);
+      FillWidget* _metabackground = nullptr;
+    #if DSP_INVERT_TITLE || defined(DSP_OLED)
+      if (config.store.stationLine) {
+       _metabackground = new FillWidget(metaBGConfLine, config.theme.metafill);
+      } else {
+       _metabackground = new FillWidget(metaBGConf, config.theme.metafill);
+      }
+    #else
+      _metabackground = new FillWidget(metaBGConfInv, config.theme.metafill);
+    #endif
+  #endif
+  #if DSP_MODEL==DSP_NOKIA5110
+    _plbackground = new FillWidget(playlBGConf, 1);
+    //_metabackground = new FillWidget(metaBGConf, 1);
+  #endif
+  #ifndef HIDE_VU
+    _vuwidget = new VuWidget(getvuConf(), getbandsConf(), config.theme.vumax, config.theme.vumin, config.theme.background);
+  #endif
+  #ifndef HIDE_VOLBAR
+    _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, 100, config.theme.volbarout); // "vol_step"
+  #endif
+  #ifndef HIDE_HEAPBAR
+    _heapbar = new SliderWidget(heapbarConf, config.theme.buffer, config.theme.background, psramInit()?300000:1600 * config.store.abuff);
+  #endif
+  #ifndef HIDE_VOL
+    _voltxt = new TextWidget(voltxtConf, 10, false, config.theme.vol, config.theme.background);
+  #endif
+  #ifndef HIDE_IP
+    _volip = new TextWidget(iptxtConf, 30, false, config.theme.ip, config.theme.background);
+  #endif
+  #ifndef HIDE_RSSI
+    _rssi = new TextWidget(rssiConf, 20, false, config.theme.rssi, config.theme.background);
+  #endif
+  _nums->init(numConf, 10, false, config.theme.digit, config.theme.background);
+  #ifndef HIDE_WEATHER
+    _weather = new ScrollWidget("\007", weatherConf, config.theme.weather, config.theme.background);
+  #endif
+  
+  if(_volbar)   _footer->addWidget( _volbar);
+  if(_voltxt)   _footer->addWidget( _voltxt);
+  if(_volip)    _footer->addWidget( _volip);
+  if(_rssi)     _footer->addWidget( _rssi);
+  if(_heapbar)  _footer->addWidget( _heapbar);
+  
+  if(_metabackground) pages[PG_PLAYER]->addWidget( _metabackground);
+  pages[PG_PLAYER]->addWidget(_meta);
+  pages[PG_PLAYER]->addWidget(_title1);
+  if(_title2) pages[PG_PLAYER]->addWidget(_title2);
+  if(_weather) pages[PG_PLAYER]->addWidget(_weather);
+  #if BITRATE_FULL
+    _fullbitrate = new BitrateWidget(getfullbitrateConf(), config.theme.bitrate, config.theme.background);
+    pages[PG_PLAYER]->addWidget( _fullbitrate);
+  #else
+    _bitrate = new TextWidget(bitrateConf, 30, false, config.theme.bitrate, config.theme.background);
+    pages[PG_PLAYER]->addWidget( _bitrate);
+  #endif
+  if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
+  pages[PG_PLAYER]->addWidget(_clock);
+  pages[PG_SCREENSAVER]->addWidget(_clock);
+  pages[PG_PLAYER]->addWidget(_date);
+  #if DSP_MODEL==DSP_ILI9488 || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_NV3041A
+  pages[PG_SCREENSAVER]->addWidget(_date);
+  #endif
+  pages[PG_PLAYER]->addPage(_footer);
+
+  if(_metabackground) pages[PG_DIALOG]->addWidget( _metabackground);
+  pages[PG_DIALOG]->addWidget(_meta);
+  pages[PG_DIALOG]->addWidget(_nums);
+  
+  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
+    pages[PG_DIALOG]->addPage(_footer);
+  #endif
+  #if !defined(DSP_LCD)
+  if(_plbackground) {
+    pages[PG_PLAYLIST]->addWidget( _plbackground);
+    _plbackground->setHeight(_plwidget->itemHeight());
+    _plbackground->moveTo({0,(uint16_t)(_plwidget->currentTop()-playlistConf.widget.textsize*2), (int16_t)playlBGConf.width});
+  }
+  #endif
+  pages[PG_PLAYLIST]->addWidget(_plcurrent);
+  pages[PG_PLAYLIST]->addWidget(_plwidget);
+  for(const auto& p: pages) _pager->addPage(p);
+}
+
+void Display::_apScreen() {
+  if(_boot) _pager->removePage(_boot);
+  #ifndef DSP_LCD
+    _boot = new Page();
+    #if DSP_MODEL!=DSP_NOKIA5110
+      #if DSP_INVERT_TITLE || defined(DSP_OLED)
+      _boot->addWidget(new FillWidget(metaBGConf, config.theme.metafill));
+      #else
+      _boot->addWidget(new FillWidget(metaBGConfInv, config.theme.metafill));
+      #endif
+    #endif
+    ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
+    bootTitle->setText("yoRadio AP Mode");
+    TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(apNameConf, 30, false, config.theme.title1, config.theme.background));
+    apname->setText(LANG::apNameTxt);
+    TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(apName2Conf, 30, false, config.theme.clock, config.theme.background));
+    apname2->setText(apSsid);
+    TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(apPassConf, 30, false, config.theme.title1, config.theme.background));
+    appass->setText(LANG::apPassTxt);
+    TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(apPass2Conf, 30, false, config.theme.clock, config.theme.background));
+    appass2->setText(apPassword);
+    ScrollWidget *bootSett = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apSettConf, config.theme.title2, config.theme.background));
+    bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
+    _pager->addPage(_boot);
+    _pager->setPage(_boot);
+  #else
+    dsp.apScreen();
+  #endif
+}
+
+void Display::_start() {
+  if(_boot) _pager->removePage(_boot);
+  #ifdef USE_NEXTION
+    nextion.wake();
+  #endif
+  if (network.status != CONNECTED && network.status != SDREADY) {
+    _apScreen();
+    #ifdef USE_NEXTION
+      nextion.apScreen();
+    #endif
+    _bootStep = 2;
+    return;
+  }
+  #ifdef USE_NEXTION
+    //nextion.putcmd("page player");
+    nextion.start();
+  #endif
+  _buildPager();
+  _mode = PLAYER;
+  config.setTitle(LANG::const_PlReady);
+  
+  if(_heapbar)  _heapbar->lock(!config.store.audioinfo);
+  
+  if(_weather)  _weather->lock(!config.store.showweather);
+  if(_weather && config.store.showweather)  _weather->setText(LANG::const_getWeather);
+
+  if(_vuwidget) _vuwidget->lock();
+  if(_rssi)     _setRSSI(WiFi.RSSI());
+  /*#ifndef HIDE_IP
+    if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+  #endif*/
+  #ifndef HIDE_IP
+    #if DSP_MODEL != DSP_ST7789_76
+      if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+    #endif
+  #endif
+  _pager->setPage( pages[PG_PLAYER]);
+  _volume();
+  _station();
+//  _refreshWeatherUI();
+  _time(false);
+  _bootStep = 2;
+  pm.on_display_player();
+}
+
+void Display::_showDialog(const char *title){
+  dsp.setScrollId(NULL);
+  _pager->setPage( pages[PG_DIALOG]);
+  #ifdef META_MOVE
+    _meta->moveTo(metaMove);
+  #endif
+  _meta->setAlign(WA_CENTER);
+  _meta->setText(title);
+}
+
+void Display::_swichMode(displayMode_e newmode) {
+  #ifdef USE_NEXTION
+    //nextion.swichMode(newmode);
+    nextion.putRequest({NEWMODE, newmode});
+  #endif
+if (newmode == _mode || 
+    (network.status != CONNECTED && network.status != SDREADY)) return;
+
+  _mode = newmode;
+  dsp.setScrollId(NULL);
+  if (newmode == PLAYER) {
+    if (config.isScreensaver) {
+        if (_clock) _clock->moveTo(getclockMove());
+        if (_date)  _date->moveTo(getdateMove());
+    }
+   if (player.isRunning()) {
+     auto cm = getclockMove();
+     if (cm.width < 0) _clock->moveBack();
+     else              _clock->moveTo(cm);
+   } else {
+    _clock->moveBack();
+  }
+    #ifdef DSP_LCD
+      dsp.clearDsp();
+    #endif
+    numOfNextStation = 0;
+    #ifdef META_MOVE
+      _meta->moveBack();
+    #endif
+    _meta->setAlign(metaConf.widget.align);
+    _meta->setText(config.station.name);
+    _nums->setText("");
+    config.isScreensaver = false;
+    _pager->setPage( pages[PG_PLAYER]);
+    config.setDspOn(config.store.dspon, false);
+    pm.on_display_player();
+//    _kickWeatherRefresh();
+  }
+  if (newmode == SCREENSAVER || newmode == SCREENBLANK) {
+    config.isScreensaver = true;
+    _pager->setPage( pages[PG_SCREENSAVER]);
+    _layoutChange(player.isRunning());
+    if (_clock) {
+      WidgetConfig ccfg = getclockConf();
+      _clock->moveTo({ccfg.left, ccfg.top, 0});
+      _clock->draw(true);
+    }
+    if (_date) {
+        auto dc = getDateConf();
+        _date->moveTo({ dc.widget.left, dc.widget.top, dc.width });
+    }
+    if (newmode == SCREENBLANK) {
+      //dsp.clearClock();
+      _clock->clear();
+      config.setDspOn(false, false);
+    }
+  }else{
+    config.screensaverTicks=SCREENSAVERSTARTUPDELAY;
+    config.screensaverPlayingTicks=SCREENSAVERSTARTUPDELAY;
+    config.isScreensaver = false;
+  }
+  
+  if (newmode == VOL) {
+  #if DSP_MODEL == DSP_ST7789_76
+      _showDialog(config.ipToStr(WiFi.localIP()));
+  #else
+    #ifndef HIDE_IP
+      _showDialog(LANG::const_DlgVolume);
+    #else
+      _showDialog(config.ipToStr(WiFi.localIP()));
+    #endif
+  #endif
+      _nums->setText(config.store.volume, numtxtFmt);
+  }
+  if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
+  if (newmode == UPDATING)  _showDialog(LANG::const_DlgUpdate);
+  if (newmode == SLEEPING)  _showDialog("SLEEPING");
+  if (newmode == SDCHANGE)  _showDialog(LANG::const_waitForSD);
+  if (newmode == INFO || newmode == SETTINGS || newmode == TIMEZONE || newmode == WIFI) _showDialog(LANG::const_DlgNextion);
+  if (newmode == NUMBERS) _showDialog("");
+  if (newmode == STATIONS) {
+    _pager->setPage( pages[PG_PLAYLIST]);
+    _plcurrent->setText("");
+    currentPlItem = config.lastStation();
+    _drawPlaylist();
+  }
+  
+}
+
+void Display::resetQueue(){
+  if(displayQueue!=NULL) xQueueReset(displayQueue);
+}
+
+void Display::_drawPlaylist() {
+  //dsp.drawPlaylist(currentPlItem);
+  _plwidget->drawPlaylist(currentPlItem);
+  timekeeper.waitAndReturnPlayer(5);  //original value = 30
+}
+
+void Display::_drawNextStationNum(uint16_t num) {
+  timekeeper.waitAndReturnPlayer(30);
+  _meta->setText(config.stationByNum(num));
+  _nums->setText(num, "%d");
+}
+
+void Display::putRequest(displayRequestType_e type, int payload){
+  if(displayQueue==NULL) return;
+  requestParams_t request;
+  request.type = type;
+  request.payload = payload;
+  xQueueSend(displayQueue, &request, DSQ_SEND_DELAY);
+  #ifdef USE_NEXTION
+    nextion.putRequest(request);
+  #endif
+}
+
+void Display::_layoutChange(bool played){
+  if (config.store.vumeter) {
+    if (played) {
+      if (_vuwidget) _vuwidget->unlock();
+      auto cm = getclockMove();
+      if (cm.width < 0) _clock->moveBack();
+      else              _clock->moveTo(cm);
+      if (_weather) _weather->moveTo(weatherMoveVU);
+      if (_date) {
+        _date->setText("");
+        auto dm = getdateMove();
+        if (dm.width < 0) _date->moveBack();
+        else              _date->moveTo(dm);
+        _date->update();
+      }
+
+    } else {
+      if (_vuwidget && !_vuwidget->locked()) _vuwidget->lock();
+      _clock->moveBack();
+      if (_weather) _weather->moveBack();
+      if (_date) {
+        _date->setText("");
+        _date->moveBack();
+        _date->update();
+      }
+    }
+
+  } else {
+    if (_vuwidget && !_vuwidget->locked()) _vuwidget->lock();
+    if (played) {
+      if (_weather) _weather->moveTo(weatherMove);
+      _clock->moveBack();
+
+      if (_date) {
+        _date->setText("");
+        _date->moveBack(); 
+        _date->update();
+      }
+    } else {
+      if (_weather) _weather->moveBack();
+      _clock->moveBack();
+
+      if (_date) {
+        _date->setText("");
+        _date->moveBack();
+        _date->update();
+      }
+    }
+  }
+}
+
+
+void Display::loop() {
+  if(_bootStep==0) {
+    _pager->begin();
+    _bootScreen();
+    return;
+  }
+  if(displayQueue==NULL || _locked) return;
+  _pager->loop();
+#ifdef USE_NEXTION
+  nextion.loop();
+#endif
+  requestParams_t request;
+  if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
+    bool pm_result = true;
+    pm.on_display_queue(request, pm_result);
+    if(pm_result)
+      switch (request.type){
+        case NEWMODE: _swichMode((displayMode_e)request.payload); break;
+        case CLOSEPLAYLIST: player.sendCommand({PR_PLAY, request.payload}); break;
+        case CLOCK: 
+          if(_mode==PLAYER || _mode==SCREENSAVER) _time(request.payload==1); 
+          /*#ifdef USE_NEXTION
+            if(_mode==TIMEZONE) nextion.localTime(network.timeinfo);
+            if(_mode==INFO)     nextion.rssi();
+          #endif*/
+          break;
+        case NEWTITLE: _title(); break;
+        case NEWSTATION: _station(); break;
+        case NEXTSTATION: _drawNextStationNum(request.payload); break;
+        case DRAWPLAYLIST: _drawPlaylist(); break;
+        case DRAWVOL: _volume(); break;
+        case DBITRATE: {
+          if(_mode==PLAYER){   // csak a lejátszás képernyőn frissíti a bitrateWidgetet
+            char buf[20]; 
+            snprintf(buf, 20, bitrateFmt, config.station.bitrate); 
+            if(_bitrate) { _bitrate->setText(config.station.bitrate==0?"":buf); } 
+            if(_fullbitrate) { 
+              _fullbitrate->setBitrate(config.station.bitrate); 
+              _fullbitrate->setFormat(config.configFmt); 
+            } 
+          }
+        }
+        break;
+        case AUDIOINFO: if(_heapbar)  { _heapbar->lock(!config.store.audioinfo); _heapbar->setValue(player.inBufferFilled()); } break;
+        case SHOWVUMETER: {
+          if (_vuwidget) {
+            if (config.store.vumeter) _vuwidget->unlock();
+            else                       _vuwidget->lock(); 
+
+            _layoutChange(player.isRunning()); 
+          }
+          break;
+        }
+        case SHOWWEATHER: {
+          if(_weather) _weather->lock(!config.store.showweather);
+          if(!config.store.showweather){
+            /*#ifndef HIDE_IP
+            if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+            #endif*/
+            #ifndef HIDE_IP
+              #if DSP_MODEL != DSP_ST7789_76
+                if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+              #endif
+            #endif
+          }else{
+            if(_weather) _weather->setText(LANG::const_getWeather);
+//            _kickWeatherRefresh();
+          }
+          break;
+        }
+        case NEWWEATHER: {
+          if(_weather && timekeeper.weatherBuf) _weather->setText(timekeeper.weatherBuf);
+          break;
+        }
+        case BOOTSTRING: {
+          if(_bootstring) _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
+          /*#ifdef USE_NEXTION
+            char buf[50];
+            snprintf(buf, 50, bootstrFmt, config.ssids[request.payload].ssid);
+            nextion.bootString(buf);
+          #endif*/
+          break;
+        }
+        case WAITFORSD: {
+          if(_bootstring) _bootstring->setText(LANG::const_waitForSD);
+          break;
+        }
+        case SDFILEINDEX: {
+          if(_mode == SDCHANGE) _nums->setText(request.payload, "%d");
+          break;
+        }
+        case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } if (_heapbar && config.store.audioinfo) _heapbar->setValue(player.isRunning()?player.inBufferFilled():0); break;
+        case PSTART: _layoutChange(true);   break;
+        case PSTOP:  _layoutChange(false);  break;
+        case DSP_START: _start();  break;
+        case NEWIP: {
+          /*#ifndef HIDE_IP
+            if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+          #endif*/
+          #ifndef HIDE_IP
+            #if DSP_MODEL != DSP_ST7789_76
+              if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+            #endif
+          #endif
+          break;
+        }
+        case DSP_RECONF: {
+          _beginRebuild();
+          config.loadTheme();
+          dsp.clearDsp();
+          _oldPager = _pager;
+          for (int i=0; i<4; i++) _oldPages[i] = pages[i];
+          _rebuildUI();
+            if (_vuwidget && !config.store.vumeter) {
+              _vuwidget->lock(); 
+            }
+         // FORCE redraw
+          _station();
+          _title();
+          _volume();
+          _time(false);
+          _layoutChange(player.isRunning());
+           if (_fullbitrate) { 
+            _fullbitrate->setBitrate(config.station.bitrate);
+            _fullbitrate->setFormat(config.configFmt);
+           }
+          if (_bitrate) {
+              char buf[20];
+              snprintf(buf, sizeof(buf), bitrateFmt, config.station.bitrate);
+              _bitrate->setText(config.station.bitrate==0 ? "" : buf);
+          }
+          if (_volip) {
+             _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+          }
+          if (_weather && config.store.showweather) {
+             _weather->setText(LANG::const_getWeather);
+          }
+          if (_rssi) {
+            _setRSSI(WiFi.RSSI());
+          }
+          _endRebuild();
+          _kickWeatherRefresh();
+          break;
+        }
+
+        default: break;
+
+        if (uxQueueMessagesWaiting(displayQueue))
+          return;
+      }
+  }
+
+  dsp.loop();
+/*
+  #if I2S_DOUT==255
+  player.computeVUlevel();
+  #endif
+*/
+}
+
+void Display::_setRSSI(int rssi) {
+  if(!_rssi) return;
+#if RSSI_DIGIT
+  _rssi->setText(rssi, rssiFmt);
+  return;
+#endif
+  char rssiG[3];
+  int rssi_steps[] = {RSSI_STEPS};
+  if(rssi >= rssi_steps[0]) strlcpy(rssiG, "\004\006", 3);
+  if(rssi >= rssi_steps[1] && rssi < rssi_steps[0]) strlcpy(rssiG, "\004\005", 3);
+  if(rssi >= rssi_steps[2] && rssi < rssi_steps[1]) strlcpy(rssiG, "\004\002", 3);
+  if(rssi >= rssi_steps[3] && rssi < rssi_steps[2]) strlcpy(rssiG, "\003\002", 3);
+  if(rssi <  rssi_steps[3] || rssi >=  0) strlcpy(rssiG, "\001\002", 3);
+  _rssi->setText(rssiG);
+}
+
+void Display::_station() {
+  _meta->setAlign(metaConf.widget.align);
+  _meta->setText(config.station.name);
+/*#ifdef USE_NEXTION
+  nextion.newNameset(config.station.name);
+  nextion.bitrate(config.station.bitrate);
+  nextion.bitratePic(ICON_NA);
+#endif*/
+}
+
+char *split(char *str, const char *delim) {
+  char *dmp = strstr(str, delim);
+  if (dmp == NULL) return NULL;
+  *dmp = '\0'; 
+  return dmp + strlen(delim);
+}
+
+void Display::_title() {
+  if (strlen(config.station.title) > 0) {
+    char tmpbuf[strlen(config.station.title)+1];
+    strlcpy(tmpbuf, config.station.title, strlen(config.station.title)+1);
+    char *stitle = split(tmpbuf, " - ");
+    if(stitle && _title2){
+      _title1->setText(tmpbuf);
+      _title2->setText(stitle);
+    }else{
+      _title1->setText(config.station.title);
+      if(_title2) _title2->setText("");
+    }
+    /*#ifdef USE_NEXTION
+      nextion.newTitle(config.station.title);
+    #endif*/
+    
+  }else{
+    //_title1->setText("");
+    // No StreamTitle available → show station name instead of "Connection"
+    _title1->setText(config.station.name);
+    if(_title2) _title2->setText("");
+  }
+  if (player_on_track_change) player_on_track_change();
+  pm.on_track_change();
+}
+
+void Display::_time(bool redraw) {
+  
+#if LIGHT_SENSOR!=255
+  if(config.store.dspon) {
+    config.store.brightness = AUTOBACKLIGHT(analogRead(LIGHT_SENSOR));
+    config.setBrightness();
+  }
+#endif
+  static int lastSSMinute = -1;
+  if (!config.isScreensaver) {
+    lastSSMinute = -1;
+  }
+  
+  if (config.isScreensaver) {
+    int m = network.timeinfo.tm_min;
+
+    if (m != lastSSMinute) {
+      lastSSMinute = m;
+
+      WidgetConfig ccfg = getclockConf();
+
+      uint16_t contentH = (TIME_SIZE < 19)
+        ? (uint16_t)(TIME_SIZE * CHARHEIGHT)
+        : (uint16_t)_clock->dateSize();
+
+      uint16_t topMargin    = (TIME_SIZE < 19) ? TFT_FRAMEWDT : (uint16_t)(TFT_FRAMEWDT + TIME_SIZE);
+      uint16_t bottomMargin = (TIME_SIZE < 19) ? TFT_FRAMEWDT : (uint16_t)(TFT_FRAMEWDT * 2);
+      int16_t ymin = topMargin;
+      int16_t ymax = (int16_t)dsp.height() - (int16_t)contentH - (int16_t)bottomMargin;
+
+#ifdef SAVER_Y_MIN
+      if (SAVER_Y_MIN < ymax) ymax = SAVER_Y_MIN;
+#endif
+
+      if (ymax < ymin) ymax = ymin;
+      uint16_t ft = random(ymin, ymax + 1);
+      uint16_t cw = _clock->clockWidth();
+      uint16_t lt = (uint16_t)random(TFT_FRAMEWDT, dsp.width() - cw - TFT_FRAMEWDT);
+
+      MoveConfig pos;
+      pos.y = ft;
+      pos.x = (ccfg.align == WA_CENTER) ? (lt - (dsp.width() - cw)/2) : lt;
+      pos.width = 0;
+
+      dsp.fillScreen(0x0000);
+      _clock->moveTo(pos);
+
+      if (_date) {
+        _date->setText("");
+
+        const ScrollConfig& dc = getDateConf();
+        const auto         cc = getclockConf();
+
+        MoveConfig dm;
+        dm.width = dc.width;
+
+        const int16_t dY = (int16_t)dc.widget.top - (int16_t)cc.top;
+        dm.y = (uint16_t)((int16_t)pos.y + dY);
+
+        const int16_t dX = (int16_t)pos.x - (int16_t)cc.left;   // cc.left az óra “bázis” X-e
+        dm.x = (uint16_t)((int16_t)dc.widget.left + dX);
+
+        _date->moveTo(dm);
+      }
+    }
+  }
+
+  _clock->draw();
+  if (_date) _date->update();
+  /*#ifdef USE_NEXTION
+    nextion.printClock(network.timeinfo);
+  #endif*/
+}
+
+void Display::_volume() {
+  if (_volbar) {                                // Módosítás "vol_step"
+    int vol = (config.store.volume ); 
+    if (vol > 100)
+      vol = 100;
+    if (vol < 0)
+      vol = 0;
+    _volbar->setValue(vol);
+  }
+  #ifndef HIDE_VOL
+  if(_voltxt) // ha az alapképernyő van
+    _voltxt->setText(config.store.volume, voltxtFmt); // Módosítás "vol_step"
+  #endif
+  if(_mode==VOL) {
+    timekeeper.waitAndReturnPlayer(2);
+    _nums->setText(config.store.volume, numtxtFmt);
+  }
+  /*#ifdef USE_NEXTION
+    nextion.setVol(config.store.volume, _mode == VOL);
+  #endif*/
+}
+
+void Display::flip(){ dsp.flip(); }
+
+void Display::invert(){ dsp.invert(); }
+
+void  Display::setContrast(){
+  #if DSP_MODEL==DSP_NOKIA5110
+    dsp.setContrast(config.store.contrast);
+  #endif
+}
+
+bool Display::deepsleep(){
+#if defined(LCD_I2C) || defined(DSP_OLED) || BRIGHTNESS_PIN!=255
+  dsp.sleep();
+  return true;
+#endif
+  return false;
+}
+
+void Display::wakeup(){
+#if defined(LCD_I2C) || defined(DSP_OLED) || BRIGHTNESS_PIN!=255
+  dsp.wake();
+#endif
+}
+
+void Display::_refreshWeatherUI() {
+  if (!_weather) return;
+
+  _weather->lock(!config.store.showweather);
+
+  if (config.store.showweather) {
+    if (timekeeper.weatherBuf && timekeeper.weatherBuf[0] != '\0') {
+      _weather->setText(timekeeper.weatherBuf);
+    } else {
+      _weather->setText(LANG::const_getWeather);
+    }
+  } else {
+  /*#ifndef HIDE_IP
+    if (_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+  #endif*/
+  #ifndef HIDE_IP
+    #if DSP_MODEL != DSP_ST7789_76
+      if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+    #endif
+  #endif
+  }
+}
+
+void Display::_kickWeatherRefresh() {
+  if (!_weather) return;
+  _weather->lock(!config.store.showweather);
+  if (config.store.showweather) {
+    _weather->setAlign(weatherConf.widget.align);
+    _weather->setText(LANG::const_getWeather);
+    timekeeper.forceWeather = true;
+  }
+}
+
+void Display::requestReconfigure() {
+  putRequest(DSP_RECONF, 0);
+}
+
+void Display::_beginRebuild() {
+  _locked = true;
+  resetQueue();
+  dsp.setScrollId(NULL);
+}
+
+void Display::_rebuildUI() {
+  for (auto &p : pages) p = new Page();
+
+  _pager     = new Pager();
+  _footer    = new Page();
+  _plwidget  = new PlayListWidget();
+  _nums      = new NumWidget();
+  _clock     = new ClockWidget();
+  _date      = new DateWidget();
+  _meta      = new ScrollWidget();
+  _title1    = new ScrollWidget();
+  _plcurrent = new ScrollWidget();
+  _title2    = nullptr;
+  _buildPager();
+
+  switch (_mode) {
+    case PLAYER:     _pager->setPage(pages[PG_PLAYER]);     break;
+    case SCREENSAVER:_pager->setPage(pages[PG_SCREENSAVER]);break;
+    case STATIONS:   _pager->setPage(pages[PG_PLAYLIST]);   break;
+    case VOL:
+    case LOST:
+    case UPDATING:
+    case INFO:
+    case SETTINGS:
+    case TIMEZONE:
+    case WIFI:
+    case NUMBERS:
+    case SLEEPING:
+    case SDCHANGE:
+    case SCREENBLANK:
+    default:         _pager->setPage(pages[PG_DIALOG]);     break;
+  }
+
+  if (_rssi) _setRSSI(WiFi.RSSI());
+  _volume();
+  _station();
+  _refreshWeatherUI();
+  _time(false);
+  _layoutChange(player.isRunning());
+}
+
+void Display::_endRebuild() {
+  _locked = false;
+}
+
+//============================================================================================================================
+#else // !DUMMYDISPLAY
+//============================================================================================================================
+void Display::init(){
+  _createDspTask();
+  #ifdef USE_NEXTION
+  nextion.begin(true);
+  #endif
+}
+void Display::_start(){
+  #ifdef USE_NEXTION
+  //nextion.putcmd("page player");
+  nextion.start();
+  #endif
+  config.setTitle(LANG::const_PlReady);
+}
+
+void Display::putRequest(displayRequestType_e type, int payload){
+  if(type==DSP_START) _start();
+  #ifdef USE_NEXTION
+    requestParams_t request;
+    request.type = type;
+    request.payload = payload;
+    nextion.putRequest(request);
+  #else
+    if(type==NEWMODE) mode((displayMode_e)payload);
+  #endif
+}
+//============================================================================================================================
+#endif // DUMMYDISPLAY
