@@ -218,10 +218,15 @@ yoRadio/locale/namedays/namedays_GR.h
 
 ## 📂 Repository Structure
 yoRadio-Fusion/
+
  ├── Audio_IDF_MOD/        # High-bitrate audio engine patches + docs
+ 
  ├── boards_samples/       # Tested boards + custom display drivers
+ 
  ├── yoEditor_v1.0.1/      # Playlist editor (external project)
+ 
  └── yoRadio/              # Main firmware
+ 
 
 ## 📸 Screenshots
 
