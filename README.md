@@ -230,7 +230,32 @@ yoRadio-Fusion/
 
 ## 📸 Screenshots
 
-(Coming soon — Web UI and display layout examples)
+webUI new features
+
+<img width="486" height="451" alt="2025-11-25_16-13-19" src="https://github.com/user-attachments/assets/fc5e6e74-02da-46f4-b34a-4122167a2668" />
+
+Customize.html
+
+<img width="426" height="779" alt="2025-11-25_16-18-09" src="https://github.com/user-attachments/assets/7eed5a0e-3f91-4be2-8918-5184053b96d2" />
+
+<img width="440" height="548" alt="2025-11-25_16-15-56" src="https://github.com/user-attachments/assets/dd5d9218-8b3a-4fb7-ba84-ac3b9823d167" />
+
+<img width="435" height="702" alt="2025-11-25_16-15-28" src="https://github.com/user-attachments/assets/df58c49b-6a0e-4150-9c67-2aef0448bee8" />
+
+<img width="436" height="708" alt="2025-11-25_16-14-56" src="https://github.com/user-attachments/assets/9e3127b1-fd16-4883-acc4-09feb8fd47b2" />
+
+<img width="435" height="610" alt="2025-11-25_16-14-21" src="https://github.com/user-attachments/assets/79794cbc-34fc-4032-be5b-60ec80c47eb7" />
+
+Settings.html
+
+for air pressure data 
+
+<img width="573" height="732" alt="2025-11-25_16-18-52" src="https://github.com/user-attachments/assets/807e4c4e-f05b-4f0f-ae92-7172bbe147f9" />
+
+Timed switch-on/switch-off
+
+<img width="568" height="756" alt="2025-11-25_16-19-30" src="https://github.com/user-attachments/assets/7f37d638-d57c-43bc-8295-34593138cc22" />
+
 
 ## 📦 Installation (Arduino IDE)
 
