@@ -1,3 +1,7 @@
+<p align="center">
+<img width="850" alt="bitkép" src="https://github.com/user-attachments/assets/9f605819-092a-499d-8bec-b7d0c92f0b7b" />
+</p>
+
 # yoRadio Fusion – ESP32 Web Radio
 **Customized ESP32-S3 internet radio with advanced display drivers and Web UI**
 
