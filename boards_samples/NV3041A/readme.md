@@ -53,10 +53,4 @@ They contain the correct bus/mutex logic for the Guition NV3041A board.
     They are provided here only if you want to integrate this display  
     into another yoRadio firmware version.)*
 
----
-
-## 👍 Notes
-
-This board **requires PSRAM**, and is fully supported by yoRadio Fusion  
-using the NV3041A display driver and the custom SD manager implementation.
 
