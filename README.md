@@ -1,5 +1,5 @@
 <p align="center">
-<img width="850" alt="bitkép" src="https://github.com/user-attachments/assets/9f605819-092a-499d-8bec-b7d0c92f0b7b" />
+<img width="850" alt="bitkép" src="https://github.com/user-attachments/assets/a0028a79-29e3-4075-80c7-ecfb5bf0300b" />
 </p>
 
 # yoRadio Fusion – ESP32 Web Radio
