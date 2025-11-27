@@ -4,6 +4,15 @@ This folder contains the required configuration, drivers and files for using
 the **Guition JC4827W543C (NV3041A 480×272)** display with *yoRadio Fusion*.
 
 ---
+## 🛒 Hardware Availability (Where to Buy)
+
+▶ Guition JC4827W543C (4.3" NV3041A, ESP32-S3) motherboard:
+
+https://www.aliexpress.com/item/1005006729377800.html?spm=a2g0o.order_list.order_list_main.83.22231802FnZGjh
+
+▶ JST MX1.25 Wire Cable Connector **4** pin for extended GPIO:
+
+https://www.aliexpress.com/item/1005007277110532.html?spm=a2g0o.order_list.order_list_main.214.22231802FnZGjh
 
 ## 📚 Required Arduino Libraries
 
