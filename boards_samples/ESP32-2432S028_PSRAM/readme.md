@@ -19,45 +19,31 @@ All steps are described below.
 
 ---
 
+
 ## 🔧 1. Adding External PSRAM (8 MB)
 
 The ESP32-2432S028 does not include PSRAM by default.  
 yoRadio Fusion requires PSRAM for stable audio buffering and display operation.
 
 ### ✔ Required component
-- 8 MB **SPIRAM / PSRAM** chip  
-  – electrically compatible with **Espressif ESP-PSRAM32**  
-  – select correct **voltage version** (1.8 V or 3.6 V depending on module)
+
+  - 4 MB **SPIRAM / PSRAM** chip  
+  - electrically compatible with **Espressif ESP-PSRAM32**  
+  - select correct **voltage version** (1.8 V or 3.6 V depending on module)
 
 ### ✔ Wiring instructions
 
 Solder the PSRAM chip **directly onto the Flash chip's pads**:
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-
-      <h3>PSRAM Wiring Table</h3>
-
-      <table>
-        <tr><th>PSRAM pin</th><th>Connect to</th></tr>
-        <tr><td>2</td><td>Flash pin 2</td></tr>
-        <tr><td>3</td><td>Flash pin 3</td></tr>
-        <tr><td>4</td><td>Flash pin 4</td></tr>
-        <tr><td>5</td><td>Flash pin 5</td></tr>
-        <tr><td>7</td><td>Flash pin 7</td></tr>
-        <tr><td>8</td><td>Flash pin 8 (VDD_SDIO 3.3 V)</td></tr>
-      </table>
-
-    </td>
-
-    <td width="50%" align="center" valign="top">
-      <img src="cyd_PSRAM_mod_ver2.jpg" width="350">
-      <br>
-      <em>PSRAM modification wiring (ESP32-2432S028 CYD)</em>
-    </td>
-  </tr>
-</table>
+| PSRAM pin | Connect to |
+|----------|-------------|
+| 2 | Flash pin 2 |
+| 3 | Flash pin 3 |
+| 4 | Flash pin 4 |
+| 5 | Flash pin 5 |
+| 7 | Flash pin 7 |
+| 8 | Flash pin 8 (VDD_SDIO 3.3 V) |
+<img src="cyd_PSRAM_mod_ver2.jpg" width="480">
 
 Additional connections:
 
@@ -66,8 +52,6 @@ Additional connections:
 - **PSRAM pin 6** → **GPIO17**
 
 > 📌 These GPIO connections must match the ESP32 OPI PSRAM configuration used by yoRadio Fusion.
-
-
 
 ---
 
