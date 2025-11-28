@@ -7,9 +7,9 @@ for using the **ESP32-2432S028 (CYD)** board with yoRadio Fusion.
 The CYD panel **cannot be used in its factory configuration**.  
 Three hardware modifications are required:
 
-1. Add an external **8 MB PSRAM chip**
-2. Remove the onboard **FM8002A** audio amplifier
-3. Wire an external **PCM5102A DAC**, **rotary encoder**, and **IR receiver**
+1. Add an external **4 MB PSRAM chip**
+2. Remove the onboard **SC8002A** audio amplifier
+3. Wire an external **PCM5102A DAC**, **rotary encoder**, and/or **IR receiver**
 
 The PSRAM I use can be purchased here:
 
