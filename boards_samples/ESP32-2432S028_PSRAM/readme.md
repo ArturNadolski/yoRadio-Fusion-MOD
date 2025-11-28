@@ -33,15 +33,31 @@ yoRadio Fusion requires PSRAM for stable audio buffering and display operation.
 
 Solder the PSRAM chip **directly onto the Flash chip's pads**:
 
-| PSRAM pin | Connect to |
-|----------|-------------|
-| 2 | Flash pin 2 |
-| 3 | Flash pin 3 |
-| 4 | Flash pin 4 |
-| 5 | Flash pin 5 |
-| 7 | Flash pin 7 |
-| 8 | Flash pin 8 (VDD_SDIO 3.3 V) |
+<table>
+  <tr>
+    <td width="50%" valign="top">
 
+      <h3>PSRAM Wiring Table</h3>
+
+      <table>
+        <tr><th>PSRAM pin</th><th>Connect to</th></tr>
+        <tr><td>2</td><td>Flash pin 2</td></tr>
+        <tr><td>3</td><td>Flash pin 3</td></tr>
+        <tr><td>4</td><td>Flash pin 4</td></tr>
+        <tr><td>5</td><td>Flash pin 5</td></tr>
+        <tr><td>7</td><td>Flash pin 7</td></tr>
+        <tr><td>8</td><td>Flash pin 8 (VDD_SDIO 3.3 V)</td></tr>
+      </table>
+
+    </td>
+
+    <td width="50%" align="center" valign="top">
+      <img src="cyd_PSRAM_mod_ver2.jpg" width="350">
+      <br>
+      <em>PSRAM modification wiring (ESP32-2432S028 CYD)</em>
+    </td>
+  </tr>
+</table>
 
 Additional connections:
 
