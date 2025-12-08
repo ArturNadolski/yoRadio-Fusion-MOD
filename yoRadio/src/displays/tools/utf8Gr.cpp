@@ -14,10 +14,6 @@
 #include <string.h>
 #include <ctype.h>
 
-#ifndef BUFLEN
-#define BUFLEN 256
-#endif
-
 // Ensure this matches your class signature. The original used DspCore::utf8Rus.
 // If you don't compile inside that class, remove 'DspCore::' and use plain function.
 char* utf8To(const char* str, bool uppercase)
@@ -66,7 +62,8 @@ if (c1 == 0xCE) {
         case 0x8C: mapped = 0xCF; break; // Ό -> Ο
         case 0x8E: mapped = 0xD5; break; // Ύ -> Υ
         case 0x8F: mapped = 0xD9; break; // Ώ -> Ω
-
+        case 0x90: mapped = 0xC9; break; // ΐ -> Ι
+        	
         // Uppercase Α..Ο
         case 0x91: mapped = 0xC1; break; // Α
         case 0x92: mapped = 0xC2; break; // Β
@@ -95,7 +92,9 @@ if (c1 == 0xCE) {
         case 0xA7: mapped = 0xD7; break; // Χ
         case 0xA8: mapped = 0xD8; break; // Ψ
         case 0xA9: mapped = 0xD9; break; // Ω
-
+        case 0xAA: mapped = 0xC9; break; // Ϊ -> Ι
+        case 0xAB: mapped = 0xD5; break; // Ϋ -> Υ
+        	
         // Lowercase accented letters mapped to unaccented uppercase
         case 0xAC: mapped = 0xC1; break; // ά -> Α
         case 0xAD: mapped = 0xC5; break; // έ -> Ε
@@ -122,9 +121,7 @@ if (c1 == 0xCE) {
                 default: mapped = 0; break;
     }
 }
-// Add missing accented uppercase letters mapped to uppercase unaccented
-//case 0xAA: mapped = 0xC9; break; // Ϊ -> Ι
-//case 0xAB: mapped = 0xD5; break; // Ϋ -> Υ
+
 
 // Add CF group Greek letter mappings here (including final sigma and accented versions)
 if (c1 == 0xCF) {
@@ -171,5 +168,4 @@ if (c1 == 0xCF) {
 
     return outbuf;
 }
-
-#endif // UTF8RUSGFX_H
+#endif

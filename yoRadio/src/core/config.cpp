@@ -151,7 +151,7 @@ void Config::changeMode(int newmode){
   bool pir = player.isRunning();
   if(SDC_CS==255) return;
   if(getMode()==PM_SDCARD) {
-    sdResumePos = player.getAudioFilePosition();
+    //sdResumePos = player.getAudioFilePosition();
   }
   if(network.status==SOFT_AP || display.mode()==LOST){
     saveValue(&store.play_mode, static_cast<uint8_t>(PM_SDCARD));
@@ -204,15 +204,16 @@ void Config::changeMode(int newmode){
 void Config::initSDPlaylist() {
 #ifdef USE_SD
   //store.countStation = 0;
-  bool doIndex = !sdman.exists(INDEX_SD_PATH);
-  if(doIndex) sdman.indexSDPlaylist();
+  //bool doIndex = !sdman.exists(INDEX_SD_PATH);
+  //if(doIndex) sdman.indexSDPlaylist();
+  sdman.indexSDPlaylist();
   if (SDPLFS()->exists(INDEX_SD_PATH)) {
     File index = SDPLFS()->open(INDEX_SD_PATH, "r");
     //store.countStation = index.size() / 4;
-    if(doIndex){
+    //if(doIndex){
       lastStation(_randomStation());
       sdResumePos = 0;
-    }
+    //}
     index.close();
     //saveValue(&store.countStation, store.countStation, true, true);
   }
@@ -266,7 +267,7 @@ bool Config::prepareForPlaying(uint16_t stationId){
 }
 void Config::configPostPlaying(uint16_t stationId){
   if(getMode()==PM_SDCARD) {
-    sdResumePos = 0;
+    //sdResumePos = 0;
     saveValue(&store.lastSdStation, stationId);
   }
   if(store.smartstart!=2) setSmartStart(1);
@@ -274,6 +275,18 @@ void Config::configPostPlaying(uint16_t stationId){
   //display.putRequest(NEWMODE, PLAYER);
   display.putRequest(PSTART);
 }
+
+void Config::setSDpos(uint32_t val){
+  if (getMode()==PM_SDCARD){
+    sdResumePos = 0;                 // ha kézzel állítasz pozíciót, ne legyen régi resume
+    if(!player.isRunning()){
+      config.sdResumePos = val-player.sd_min;
+    }else{
+      player.setAudioFilePosition(val-player.sd_min); // futó lejátszásnál seek webről
+    }
+  }
+}
+
 void Config::initPlaylistMode(){
   uint16_t _lastStation = 0;
   uint16_t cs = playlistLength();
@@ -517,17 +530,7 @@ void Config::setWeatherKey(const char *val){
   display.putRequest(NEWMODE, CLEAR);
   display.putRequest(NEWMODE, PLAYER);
 }
-void Config::setSDpos(uint32_t val){
-  if (getMode()==PM_SDCARD){
-    sdResumePos = 0;
-    if(!player.isRunning()){
-      player.setResumeFilePos(val-player.sd_min);
-      player.sendCommand({PR_PLAY, config.store.lastSdStation});
-    }else{
-      player.setAudioFilePosition(val-player.sd_min);
-    }
-  }
-}
+
 #if IR_PIN!=255
 void Config::setIrBtn(int val){
   irindex = val;
@@ -780,7 +783,7 @@ uint16_t Config::getTimezoneOffset() {
 
 void Config::setSnuffle(bool sn){
   saveValue(&store.sdsnuffle, sn);
-  if(store.sdsnuffle) player.next();
+  //if(store.sdsnuffle) player.next();
 }
 
 #if IR_PIN!=255

@@ -7,6 +7,7 @@
 //#define AM_PM_STYLE
 //#define USDATE
 #define DIRECT_CHANNEL_CHANGE 
+//#define MetaStationNameSkip 
 
 #define DSP_MODEL            DSP_ST7789
 #define DSP_HSPI             true

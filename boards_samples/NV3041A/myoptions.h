@@ -7,6 +7,7 @@
 //#define AM_PM_STYLE
 //#define USDATE   //US Date format
 #define DIRECT_CHANNEL_CHANGE 
+#define MetaStationNameSkip 
 
 #define SAVER_Y_MIN  160
 

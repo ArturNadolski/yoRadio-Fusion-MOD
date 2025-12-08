@@ -21,7 +21,7 @@
 #define HIDE_DATE
 
 #if BITRATE_FULL
-  #define TITLE_FIX 44
+  #define TITLE_FIX 84
 #else
   #define TITLE_FIX 0
 #endif
@@ -29,7 +29,7 @@
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 3, WA_CENTER }, 140, true, MAX_WIDTH, 5000, 5, 30 };
-const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 42, 2, WA_LEFT }, 140, true, MAX_WIDTH, 5000, 4, 30 };
+const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 42, 2, WA_LEFT }, 140, true, MAX_WIDTH-TITLE_FIX, 5000, 4, 30 };
 const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 72, 2, WA_LEFT }, 140, true, MAX_WIDTH, 5000, 4, 30 };
 const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 112, 2, WA_LEFT }, 140, true, MAX_WIDTH, 1000, 2, 30 };
 const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 3, WA_CENTER }, 140, false, MAX_WIDTH, 0, 4, 20 };
@@ -62,10 +62,10 @@ const ProgressConfig bootPrgConf  PROGMEM = { 90, 14, 4 };
 //const BitrateConfig fullbitrateConf PROGMEM = {{DSP_WIDTH-TFT_FRAMEWDT-40, 37, 2, WA_LEFT}, 42 };
 inline BitrateConfig getfullbitrateConf() {
   switch (config.store.vuLayout) {
-    case 1: return {{DSP_WIDTH-TFT_FRAMEWDT-90, 76, 2, WA_LEFT}, 44 };  // Streamline
-    case 2: return {{DSP_WIDTH-TFT_FRAMEWDT-90, 76, 2, WA_LEFT}, 44 };  // Boombox
-    case 3: return {{DSP_WIDTH-TFT_FRAMEWDT-90, 76, 2, WA_LEFT}, 44 };  // Studio
-    default: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 86, 2, WA_LEFT}, 44 }; // Default
+    case 1: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Streamline
+    case 2: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Boombox
+    case 3: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Studio
+    default: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 86, 1, WA_LEFT}, 30 }; // Default
   }
 }
 
@@ -93,10 +93,20 @@ inline WidgetConfig getvuConf() {
 //const WidgetConfig  clockConf     PROGMEM = { TFT_FRAMEWDT*2, 139, 0, WA_RIGHT };
 inline WidgetConfig getclockConf() {
   switch (config.store.vuLayout) {
-    case 1: return { 105, 110, 0, WA_RIGHT };  // Streamline
-    case 2: return { 105, 110, 0, WA_RIGHT };  // Boombox
-    case 3: return { 105, 110, 0, WA_RIGHT };  // Studio
+    case 1: return { 4, 110, 0, WA_RIGHT };  // Streamline
+    case 2: return { 4, 110, 0, WA_RIGHT };  // Boombox
+    case 3: return { 4, 110, 0, WA_RIGHT };  // Studio
     default: return { 75, 120, 0, WA_RIGHT }; // Default
+  }
+}
+
+//WeatherIconConf
+inline WidgetConfig getWeatherIconConf() {
+  switch (config.store.vuLayout) {
+    case 1: return { TFT_FRAMEWDT+4, 67, 2, WA_LEFT };  // Streamline
+    case 2: return { TFT_FRAMEWDT+4, 67, 2, WA_LEFT };  // Boombox
+    case 3: return { TFT_FRAMEWDT+4, 67, 2, WA_LEFT };  // Studio
+    default: return { TFT_FRAMEWDT, 100, 2, WA_LEFT }; // Default
   }
 }
 
@@ -115,9 +125,9 @@ static inline uint16_t dateTopByLayout(uint8_t ly) {
 
 static inline uint16_t dateLeftByLayout(uint8_t ly) {
   switch (ly) {
-    case 1:  return  105;              // StreamLine
-    case 2:  return  105;              // BoomBox
-    case 3:  return  105;              // Studio
+    case 1:  return  TFT_FRAMEWDT;              // StreamLine
+    case 2:  return  TFT_FRAMEWDT;              // BoomBox
+    case 3:  return  TFT_FRAMEWDT;              // Studio
     default: return  75;              // Default
   }
 }
@@ -137,17 +147,17 @@ inline ScrollConfig getDateConf() {
 const char         numtxtFmt[]    PROGMEM = "%d";
 const char           rssiFmt[]    PROGMEM = "WiFi %d";
 const char          iptxtFmt[]    PROGMEM = "\010 %s";
-const char         voltxtFmt[]    PROGMEM = "\023\025%d";
+const char         voltxtFmt[]    PROGMEM = "\023\025%d%%";
 const char        bitrateFmt[]    PROGMEM = "%d kBs";
 
 /* MOVES  */                             /* { left, top, width } */
 //const MoveConfig    clockMove     PROGMEM = { TFT_FRAMEWDT, 139, 0 };
 inline MoveConfig getclockMove() {
   switch (config.store.vuLayout) {
-    case 1: return { 105, 110, 0 };  // Streamline
-    case 2: return { 105, 110, 0 };  // BoomBox
-    case 3: return { 105, 110, 0 };  // Studio
-    default: return { 75, 120, 0 }; // Default
+    case 1: return { 4, 110, -1 };  // Streamline
+    case 2: return { 4, 110, -1 };  // BoomBox
+    case 3: return { 4, 110, -1 };  // Studio
+    default: return { 75, 120, -1 }; // Default
   }
 }
 

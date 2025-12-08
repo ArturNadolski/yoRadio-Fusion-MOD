@@ -137,7 +137,11 @@ void Player::setError(const char *e){
 
 void Player::_stop(bool alreadyStopped){
   log_i("%s called", __func__);
-  if(config.getMode()==PM_SDCARD && !alreadyStopped) config.sdResumePos = player.getAudioFilePosition();
+  //if(config.getMode()==PM_SDCARD && !alreadyStopped) config.sdResumePos = player.getAudioFilePosition();
+  if (config.getMode() == PM_SDCARD && !alreadyStopped) {
+    config.sdResumePos = player.getAudioFilePosition();
+    config.stopedSdStationId = config.lastStation();
+  }
   _status = STOPPED;
   setOutputPins(false);
   if(!_hasError) config.setTitle((display.mode()==LOST || display.mode()==UPDATING)?"":LANG::const_PlStopped);
@@ -233,7 +237,15 @@ void Player::loop() {
   checkAutoStartStop();   /* ----- Auto On-Off Timer ----- */
   Audio::loop();
 
-  if(!isRunning() && _status==PLAYING) _stop(true);
+  if (!isRunning() && _status == PLAYING) {
+    _stop(true);
+     if (config.getMode() == PM_SDCARD) {
+      if (player.getAudioFilePosition() == 0) {  // Csak akkor next(), ha a fájl ténylegesen lejárt
+        next();
+      }
+    }
+  }
+
   if(_volTimer){
     if((millis()-_volTicks)>3000){
       config.saveVolume();
@@ -269,7 +281,8 @@ void Player::_play(uint16_t stationId) {
   
   bool isConnected = false;
   if(config.getMode()==PM_SDCARD && SDC_CS!=255){
-    isConnected=connecttoFS(sdman,config.station.url,config.sdResumePos==0?_resumeFilePos:config.sdResumePos-player.sd_min);
+    // A connecttoFS NEM támogat start offsetet SD-n → -1, indítás pozícionálás nélkül.
+    isConnected = connecttoFS(sdman, config.station.url, -1);
   }else {
     config.saveValue(&config.store.play_mode, static_cast<uint8_t>(PM_WEB));
   }
@@ -320,6 +333,7 @@ void Player::prev() {
   if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
     if (lastStation == 1) config.lastStation(config.playlistLength()); else config.lastStation(lastStation-1);
   }
+  config.stopedSdStationId = -1;  // Reseteli a seek hez mentett SD fájl sorszámát.
   sendCommand({PR_PLAY, config.lastStation()});
 }
 
@@ -330,6 +344,7 @@ void Player::next() {
   }else{
     config.lastStation(random(1, config.playlistLength()));
   }
+  config.stopedSdStationId = -1;  // Reseteli a seek hez mentett SD fájl sorszámát.
   sendCommand({PR_PLAY, config.lastStation()});
 }
 

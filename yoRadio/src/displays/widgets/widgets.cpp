@@ -7,6 +7,7 @@
 #endif
 #include "../dspcore.h"
 #include "../fonts/clockfont_api.h"
+#include "../fonts/iconsweather.h"
 #include "Arduino.h"
 #include "widgets.h"
 #include "../../core/player.h"    //  for VU widget
@@ -619,7 +620,7 @@ void VuWidget::_draw() {
   const uint16_t _vumidcolor = config.store.vuMidColor;
 
   // --- input scaling ---
-  uint16_t vulevel_raw = player.get_VUlevel(_maxDimension);  // "audio_change" nem kell paraméter
+  uint16_t vulevel_raw = player.getVUlevel(_maxDimension);  // "audio_change" nem kell paraméter
   uint16_t L_raw = (vulevel_raw >> 8) & 0xFF;
   uint16_t R_raw = (vulevel_raw) & 0xFF;
 
@@ -1003,6 +1004,11 @@ void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(wconf, fgcolor, bgcolor);
   _timeheight = _textHeight();
   _fullclock = TIME_SIZE>35 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170;
+#if DSP_MODEL == DSP_ST7789 || DSP_MODEL==DSP_ILI9341
+    if (config.store.vuLayout != 0) {
+        _fullclock = false;
+    }
+#endif
   if(_fullclock) _superfont = TIME_SIZE / 17; //magick
   else if(TIME_SIZE==19 || TIME_SIZE==2) _superfont=1;
   else _superfont=0;
@@ -1171,8 +1177,15 @@ void ClockWidget::_printClock(bool force){
         gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
         gfx.setFont();
         gfx.setTextSize(2);
-        //gfx.setCursor(_linesleft+_space+1, _top() - _timeheight + CHARHEIGHT / 2);  //másodperc felett
-        gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 2);  //másodperc alatt
+        if(TIME_SIZE==70) {
+          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 2);  //másodperc alatt
+        } 
+        if(TIME_SIZE==52) {
+          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 8);  //másodperc alatt
+        }
+        if(TIME_SIZE==35) {
+          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 12);  //másodperc alatt
+        }
         gfx.setTextColor(config.theme.dow, config.theme.background);
         char buf[3];
         strftime(buf, sizeof(buf), "%p", &network.timeinfo);
@@ -1335,76 +1348,102 @@ void ClockWidget::_clear(){}
 /**************************
       BITRATE WIDGET
  **************************/
-void BitrateWidget::init(BitrateConfig bconf, uint16_t fgcolor, uint16_t bgcolor){
-  Widget::init(bconf.widget, fgcolor, bgcolor);
-  _dimension = bconf.dimension;
-  _bitrate = 0;
-  _format = BF_UNKNOWN;
-  _charSize(bconf.widget.textsize, _charWidth, _textheight);
-  memset(_buf, 0, 6);
+void BitrateWidget::init(BitrateConfig bconf, uint16_t fgcolor, uint16_t bgcolor) {
+    Widget::init(bconf.widget, fgcolor, bgcolor);
+    _dimension = bconf.dimension;      // ez lesz a magasság
+    _bitrate   = 0;
+    _format    = BF_UNKNOWN;
+
+    _charSize(bconf.widget.textsize, _charWidth, _textheight);
+    memset(_buf, 0, sizeof(_buf));
 }
 
-void BitrateWidget::setBitrate(uint16_t bitrate){
-  _bitrate = bitrate;
-  _draw();
+void BitrateWidget::setBitrate(uint16_t bitrate) {
+    _bitrate = bitrate;
+
+    // Ha nagyobb mint 20000 → kbps konverzió
+    if (_bitrate > 20000)
+        _bitrate /= 1000;
+
+    _draw();
 }
 
-void BitrateWidget::setFormat(BitrateFormat format){
-  _format = format;
-  _draw();
+void BitrateWidget::setFormat(BitrateFormat format) {
+    _format = format;
+    _draw();
 }
 
-//TODO move to parent
-void BitrateWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
+void BitrateWidget::_charSize(uint8_t textsize, uint8_t &width, uint16_t &height) {
 #ifndef DSP_LCD
-  width = textsize * CHARWIDTH;
-  height = textsize * CHARHEIGHT;
+    width  = textsize * CHARWIDTH;
+    height = textsize * CHARHEIGHT;
 #else
-  width = 1;
-  height = 1;
+    width  = 1;
+    height = 1;
 #endif
 }
 
-void BitrateWidget::_draw(){
-  _clear();
-  if(!_active || _format == BF_UNKNOWN || _bitrate==0) return;
+void BitrateWidget::_draw() {
+    _clear();
 
-  dsp.drawRect(_config.left, _config.top, _dimension, _dimension, _fgcolor);
-  dsp.fillRect(_config.left, _config.top + _dimension/2+1, _dimension, _dimension/2-1, _fgcolor);
+    if (!_active || _format == BF_UNKNOWN || _bitrate == 0)
+        return;
 
-  dsp.setFont();
-  dsp.setTextSize(_config.textsize);
-  dsp.setTextColor(_fgcolor, _bgcolor);
+    uint16_t boxW = _dimension * 2;      // teljes szélesség
+    uint16_t boxH = _dimension / 2;      // magasság
 
- if (_bitrate < 1000) {
-  snprintf(_buf, 6, "%3u", (unsigned)_bitrate);
-} else {
-  double mbps = _bitrate / 1000.0;
-  snprintf(_buf, 6, "%3.1f", mbps);
-}
+    // --- Keret és kitöltés ---
+    dsp.drawRect(_config.left, _config.top, boxW, boxH, _fgcolor);
+    dsp.fillRect(_config.left + _dimension, _config.top, _dimension, boxH, _fgcolor);
 
-  dsp.setCursor(_config.left + _dimension/2 - _charWidth*strlen(_buf)/2 + 1, _config.top + _dimension/4 - _textheight/2 + 2);
-  dsp.print(_buf);
+    dsp.setFont();
+    dsp.setTextSize(_config.textsize);
+    dsp.setTextColor(_fgcolor, _bgcolor);
 
-  dsp.setTextColor(_bgcolor, _fgcolor);
-  dsp.setCursor(_config.left + _dimension/2 - _charWidth*3/2 + 1, _config.top + _dimension - _dimension/4 - _textheight/2);
+    // --- Bitrate string ---
+    if (_bitrate < 1000)
+        snprintf(_buf, sizeof(_buf), "%d", _bitrate);
+    else
+        snprintf(_buf, sizeof(_buf), "%.1f", _bitrate / 1000.0);
 
-  switch(_format){
-	case BF_MP3:  dsp.print("MP3"); break;
-	case BF_AAC:  dsp.print("AAC"); break;
-	case BF_FLAC: dsp.print("FLC"); break;
-	case BF_OGG:  dsp.print("OGG"); break;
-	case BF_WAV:  dsp.print("WAV"); break;
-	case BF_VOR:  dsp.print("VOR"); break;
-	case BF_OPU:  dsp.print("OPU"); break;
-    default: break;
-  }
+    // Bitrate középre → BAL blokk
+    uint16_t leftX = _config.left;
+    uint16_t centerX = leftX + (_dimension / 2);
+    uint16_t textW = strlen(_buf) * _charWidth;
+    uint16_t textH = _textheight;
+
+    dsp.setCursor(centerX - textW/2,
+                  _config.top + boxH/2 - textH/2);
+    dsp.print(_buf);
+
+    // --- Formátum → JOBB blokk ---
+    dsp.setTextColor(_bgcolor, _fgcolor);
+
+    char fmt[4] = "";
+    switch(_format){
+        case BF_MP3: strcpy(fmt,"MP3"); break;
+        case BF_AAC: strcpy(fmt,"AAC"); break;
+        case BF_FLAC:strcpy(fmt,"FLC"); break;
+        case BF_OGG: strcpy(fmt,"OGG"); break;
+        case BF_WAV: strcpy(fmt,"WAV"); break;
+        case BF_VOR: strcpy(fmt,"VOR"); break;
+        case BF_OPU: strcpy(fmt,"OPU"); break;
+        default: break;
+    }
+
+    uint16_t rightCenterX = _config.left + _dimension + (_dimension/2);
+    uint16_t fmtW = strlen(fmt) * _charWidth;
+
+    dsp.setCursor(rightCenterX - fmtW/2,
+                  _config.top + boxH/2 - textH/2);
+    dsp.print(fmt);
 }
 
 void BitrateWidget::_clear() {
-  dsp.fillRect(_config.left, _config.top, _dimension, _dimension, _bgcolor);
+    dsp.fillRect(_config.left, _config.top,
+                 _dimension * 2, _dimension / 2,
+                 _bgcolor);
 }
-
 
 /**************************
       PLAYLIST WIDGET
@@ -1519,6 +1558,122 @@ void DateWidget::update() {
 
   setText(utf8To(line, false));
 }
+
+/************************
+   WEATHER ICON WIDGET
+ ************************/
+void WeatherIconWidget::init(WidgetConfig wconf, uint16_t bgcolor){
+  // fgcolor itt nem kell, az ikon egy bitmap
+  Widget::init(wconf, 0, bgcolor);
+  _img = nullptr;
+  _iw  = 0;
+  _ih  = 0;
+}
+
+void WeatherIconWidget::_clear(){
+  if (!_active) return;
+  uint16_t w = _width  ? _width  : (_iw ? _iw : 64);
+  uint16_t h = _ih ? _ih : 64;
+  dsp.fillRect(_config.left, _config.top, w, h, _bgcolor);
+}
+
+void WeatherIconWidget::_draw(){
+  if(!_active) return;
+
+  uint16_t w = _iw ? _iw : 64;
+  uint16_t h = _ih ? _ih : 64;
+  uint16_t areaW = _width ? _width : w;
+  
+  int16_t iconX = _config.left;
+  int16_t iconY = _config.top;
+
+  // ikon kirajzolás
+  if (_img) dsp.drawRGBBitmap(iconX, iconY, _img, w, h);
+
+  // ha nincs hőmérséklet → nincs további rajz
+  if (_temp[0] == '\0') return;
+
+  dsp.setFont();
+  dsp.setTextSize(_config.textsize);
+  dsp.setTextColor(config.theme.dow, _bgcolor);
+
+  uint16_t txtW = strlen(_temp) * CHARWIDTH * _config.textsize;
+  uint16_t txtH = CHARHEIGHT * _config.textsize;
+
+  // 🔻 **Layout logika**
+  bool vertical = (config.store.vuLayout == 0);  
+  // default layout = vertical (egymás alatt)  
+  // többi layout = side-by-side
+
+  if (vertical) {
+      // ===========================
+      // ikon fölé szöveg (Default)
+      // ===========================
+      int16_t tx = _config.left + (areaW - txtW) / 2;
+      int16_t ty = _config.top - (txtH-2);
+      dsp.setCursor(tx, ty);
+      dsp.print(_temp);
+  } else {
+      // ===========================
+      // ikon mellé szöveg (StreamLine, BoomBox, Studio)
+      // ===========================
+      int16_t tx = iconX + w + 6;
+      int16_t ty = iconY + (h - txtH) / 2;
+
+      dsp.setCursor(tx, ty);
+      dsp.print(_temp);
+  }
+}
+
+void WeatherIconWidget::setIcon(const char* code){
+  if (!code || !*code) return;
+
+  // Alapértelmezett "eradio" fallback
+  _img = eradio;
+  _iw  = 62;
+  _ih  = 40;
+
+  // Azonosítás a kódrészletek alapján
+  if      (strstr(code, "01d")) { _img = img_01d; _iw = 64;  _ih = 64; }
+  else if (strstr(code, "01n")) { _img = img_01n; _iw = 64;  _ih = 64; }
+  else if (strstr(code, "02d")) { _img = img_02d; _iw = 64;  _ih = 64; }
+  else if (strstr(code, "02n")) { _img = img_02n; _iw = 64;  _ih = 64; }
+  else if (strstr(code, "03d")) { _img = img_03; _iw = 64; _ih = 64; }
+  else if (strstr(code, "03n")) { _img = img_03; _iw = 64; _ih = 64; }
+  else if (strstr(code, "04d")) { _img = img_04d;  _iw = 64; _ih = 64; }
+  else if (strstr(code, "04n")) { _img = img_04n;  _iw = 64; _ih = 64; }
+  else if (strstr(code, "09d")) { _img = img_09d;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "09n")) { _img = img_09n;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "10d")) { _img = img_10d;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "10n")) { _img = img_10n;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "11d")) { _img = img_11;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "11n")) { _img = img_11;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "13d")) { _img = img_13d;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "13n")) { _img = img_13n;  _iw = 64;  _ih = 64; }
+  else if (strstr(code, "50d")) { _img = img_50d;  _iw = 64; _ih = 64; }
+  else if (strstr(code, "50n")) { _img = img_50n;  _iw = 64; _ih = 64; }
+
+  if (_active && !_locked) {
+    _clear();
+    _draw();
+  }
+}
+
+void WeatherIconWidget::setTemp(float tempC) {
+#ifdef IMPERIALUNIT
+  snprintf(_temp, sizeof(_temp), "%.0f\011F", tempC);
+#else
+  snprintf(_temp, sizeof(_temp), "%.0f\011C", tempC);
+#endif
+
+  _hasTemp = true;
+
+  if (_active && !_locked) {
+    _clear();
+    _draw();
+  }
+}
+
 
 #ifndef DSP_LCD
 void PlayListWidget::drawPlaylist(uint16_t currentItem) {

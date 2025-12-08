@@ -28,8 +28,8 @@
 #include <libb64/cencode.h>
 #include <locale>
 #include <memory>
-#include <vector>
 #include <span>
+#include <vector>
 
 #ifndef I2S_GPIO_UNUSED
     #define I2S_GPIO_UNUSED -1 // = I2S_PIN_NO_CHANGE in IDF < 5
@@ -43,67 +43,47 @@ class Decoder; // prototype
 static constexpr std::array<const char*, 13> eventStr = {"info",    "id3data",  "eof",      "station_name", "icy_description", "streamtitle", "bitrate",
                                                          "icy_url", "icy_logo", "lasthost", "cover_image",  "lyrics",          "log"};
 //----------------------------------------------------------------------------------------------------------------------
-
 class AudioBuffer {
-    // AudioBuffer will be allocated in PSRAM
-    //
-    //  m_buffer            m_readPtr                 m_writePtr                 m_endPtr
-    //   |                       |<------dataLength------->|<------ writeSpace ----->|
-    //   ▼                       ▼                         ▼                         ▼
-    //   ---------------------------------------------------------------------------------------------------------------
-    //   |                     <--m_buffSize-->                                      |      <--m_resBuffSize -->     |
-    //   ---------------------------------------------------------------------------------------------------------------
-    //   |<-----freeSpace------->|                         |<------freeSpace-------->|
-    //
-    //
-    //
-    //   if the space between m_readPtr and buffend < m_resBuffSize copy data from the beginning to resBuff
-    //   so that the mp3/aac/flac frame is always completed
-    //
-    //  m_buffer                      m_writePtr                 m_readPtr        m_endPtr
-    //   |                                 |<-------writeSpace------>|<--dataLength-->|
-    //   ▼                                 ▼                         ▼                ▼
-    //   ---------------------------------------------------------------------------------------------------------------
-    //   |                        <--m_buffSize-->                                    |      <--m_resBuffSize -->     |
-    //   ---------------------------------------------------------------------------------------------------------------
-    //   |<---  ------dataLength--  ------>|<-------freeSpace------->|
-    //
-    //
 
   public:
-    AudioBuffer(size_t maxBlockSize = 0); // constructor
-    ~AudioBuffer();                       // frees the buffer
-    size_t   init();                      // set default values
-    bool     isInitialized() { return m_f_init; };
-    int32_t  getBufsize();
-    bool     setBufsize(size_t mbs);           // default is m_buffSizePSRAM for psram, and m_buffSizeRAM without psram
-    void     changeMaxBlockSize(uint32_t mbs); // is default 1600 for mp3 and aac, set 16384 for FLAC
-    uint32_t getMaxBlockSize();                // returns maxBlockSize
-    size_t   freeSpace();                      // number of free bytes to overwrite
-    size_t   writeSpace();                     // space fom writepointer to bufferend
-    size_t   bufferFilled();                   // returns the number of filled bytes
-    size_t   getMaxAvailableBytes();           // max readable bytes in one block
-    void     bytesWritten(size_t bw);          // update writepointer
-    void     bytesWasRead(size_t br);          // update readpointer
-    uint8_t* getWritePtr();                    // returns the current writepointer
-    uint8_t* getReadPtr();                     // returns the current readpointer
-    uint32_t getWritePos();                    // write position relative to the beginning
-    uint32_t getReadPos();                     // read position relative to the beginning
-    void     resetBuffer();                    // restore defaults
+    AudioBuffer();   // constructor
+    ~AudioBuffer();  // frees the buffer
+    size_t   init(); // set default values
+    bool     isInitialized() { return m_init; };
+    size_t   getBufsize();
+    size_t   getMaxBlockSize(); // returns maxBlockSize
+    void     setMaxBlocksize(uint32_t mbs);
+    size_t   freeSpace();             // number of free bytes to overwrite
+    size_t   writeSpace();            // space fom writepointer to bufferend
+    size_t   bufferFilled();          // returns the number of filled bytes
+    size_t   readSpace();             // max readable bytes in one block
+    void     bytesWritten(size_t bw); // update writepointer
+    void     bytesWasRead(size_t br); // update readpointer
+    uint8_t* getWritePtr();           // returns the current writepointer
+    uint8_t* getReadPtr();            // returns the current readpointer
+    void     reset();                 // restore defaults
+    void     showStatus();
 
   protected:
-    size_t          m_buffSize = UINT16_MAX * 10; // most webstreams limit the advance to 100...300Kbytes
+    size_t          m_mainBuffSize = 0; // most webstreams limit the advance to 100...300Kbytes
     size_t          m_freeSpace = 0;
     size_t          m_writeSpace = 0;
-    size_t          m_dataLength = 0;
-    size_t          m_resBuffSize = UINT16_MAX; // reserved buffspace, >= one flac frame
-    size_t          m_maxBlockSize = 1600;
+    size_t          m_resBuffSize = 0;
+    size_t          m_maxBlockSize = 0;
+    size_t          m_readSpace = 0;
+    const size_t    m_maxRet = UINT16_MAX;
     ps_ptr<uint8_t> m_buffer;
-    uint8_t*        m_writePtr = NULL;
-    uint8_t*        m_readPtr = NULL;
-    uint8_t*        m_endPtr = NULL;
-    bool            m_f_init = false;
-    bool            m_f_isEmpty = true;
+    uint8_t*        m_buffEnd = nullptr;
+    uint8_t*        m_writePtr = nullptr;
+    uint8_t*        m_readPtr = nullptr;
+    uint8_t*        m_endPtr = nullptr;
+    uint8_t*        m_startPtr = nullptr;
+    bool            m_init = false;
+    bool            m_isEmpty = true;
+    bool            m_isFull = false;
+
+  private:
+    SemaphoreHandle_t m_mutex = nullptr;
 };
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -160,11 +140,11 @@ class Audio {
     uint32_t         getAudioCurrentTime();
     uint32_t         getAudioFilePosition();
     bool             setAudioFilePosition(uint32_t pos);
-    uint16_t         get_VUlevel(uint16_t dimension);
-    uint32_t         inBufferFilled();            // returns the number of stored bytes in the inputbuffer
-    uint32_t         inBufferFree();              // returns the number of free bytes in the inputbuffer
-    uint32_t         getInBufferSize();           // returns the size of the inputbuffer in bytes
-    bool             setInBufferSize(size_t mbs); // sets the size of the inputbuffer in bytes
+    uint16_t         getVUlevel(uint16_t dimension);  //"módosítás"
+    uint32_t         inBufferFilled();  // returns the number of stored bytes in the inputbuffer
+    uint32_t         inBufferFree();    // returns the number of free bytes in the inputbuffer
+    uint32_t         getInBufferSize(); // returns the size of the inputbuffer in bytes
+    void             inBufferStatus(){InBuff.showStatus();}
     void             setTone(int8_t gainLowPass, int8_t gainBandPass, int8_t gainHighPass);
     void             setI2SCommFMT_LSB(bool commFMT);
     int              getCodec() { return m_codec; }
@@ -254,12 +234,13 @@ class Audio {
     bool         readMetadata(uint16_t b, uint16_t* readedBytes, bool first = false);
     int32_t      getChunkSize(uint16_t* readedBytes, bool first = false);
     bool         readID3V1Tag();
-    int32_t      newInBuffStart(int32_t m_resumeFilePos);
+    int32_t      newInBuffStart(int32_t resumeFilePos);
     boolean      streamDetection(uint32_t bytesAvail);
     uint32_t     m4a_correctResumeFilePos();
     uint32_t     ogg_correctResumeFilePos();
     int32_t      flac_correctResumeFilePos();
     int32_t      mp3_correctResumeFilePos();
+    int32_t      wav_correctResumeFilePos();
     uint8_t      determineOggCodec();
     void         strlower(char* str);
     void         trim(char* str);
@@ -290,6 +271,7 @@ class Audio {
     enum : int { AUDIO_NONE, HTTP_RESPONSE_HEADER, HTTP_RANGE_HEADER, AUDIO_DATA, AUDIO_LOCALFILE, AUDIO_PLAYLISTINIT, AUDIO_PLAYLISTHEADER, AUDIO_PLAYLISTDATA };
     const char* dataModeStr[8] = {"AUDIO_NONE", "HTTP_RESPONSE_HEADER", "HTTP_RANGE_HEADER", "AUDIO_DATA", "AUDIO_LOCALFILE", "AUDIO_PLAYLISTINIT", "AUDIO_PLAYLISTHEADER", "AUDIO_PLAYLISTDATA"};
     enum : int { FLAC_BEGIN = 0, FLAC_MAGIC = 1, FLAC_MBH = 2, FLAC_SINFO = 3, FLAC_PADDING = 4, FLAC_APP = 5, FLAC_SEEK = 6, FLAC_VORBIS = 7, FLAC_CUESHEET = 8, FLAC_PICTURE = 9, FLAC_OKAY = 100 };
+    enum : int { MP3_BEGIN = 0, MP3_ID3HEADER, MP3_NEXTID3, MP3_EXTHEADER, MP3_ID3FRAME, MP3_FRAMESIZE, MP3_SKIP, MP3_TAG, MP3_SYLT, MP3_ID3V22, MP3_LASTFRAMES, MP3_XING, MP3_OKAY = 100 };
     enum : int {
         M4A_BEGIN = 0,
         M4A_FTYP = 1,
@@ -309,6 +291,7 @@ class Audio {
         M4A_STSZ = 15,
         M4A_META = 16,
         M4A_MDHD = 17,
+        M4A_CHPL = 18,
         M4A_AMRDY = 99,
         M4A_OKAY = 100,
     };
@@ -340,6 +323,7 @@ class Audio {
 
     SemaphoreHandle_t mutex_playAudioData;
     SemaphoreHandle_t mutex_audioTask;
+    SemaphoreHandle_t mutex_audioTaskIsDecoding;
     TaskHandle_t      m_audioTaskHandle = nullptr;
 
 #pragma GCC diagnostic push
@@ -380,6 +364,7 @@ class Audio {
     uint32_t       m_avr_bitrate = 0;       // average bitrate, median calculated by VBR
     uint32_t       m_nominal_bitrate = 0;   // given br from header
     uint32_t       m_audioFilePosition = 0; // current position, counts every readed byte
+    uint32_t       m_audioDataReadPtr = 0;  // used in playAudioData
     uint32_t       m_audioFileSize = 0;     // local and web files
     int            m_readbytes = 0;         // bytes read
     uint32_t       m_metacount = 0;         // counts down bytes between metadata
@@ -404,8 +389,8 @@ class Audio {
     uint8_t  m_filterType[2];                // lowpass, highpass
     uint8_t  m_streamType = ST_NONE;
     uint8_t  m_ID3Size = 0; // lengt of ID3frame - ID3header
-    uint8_t  vuLeft = 0;                   // average value of samples, left channel
-    uint8_t  vuRight = 0;                  // average value of samples, right channel
+    uint8_t  vuLeft = 0;                   // average value of samples, left channel "módosítás"
+    uint8_t  vuRight = 0;                  // average value of samples, right channel "módosítás"
     uint8_t  m_vuLeft = 0;  // average value of samples, left channel
     uint8_t  m_vuRight = 0; // average value of samples, right channel
     uint8_t  m_audioTaskCoreId = 1;
@@ -436,9 +421,7 @@ class Audio {
     bool     m_f_running = false;
     bool     m_f_firstCall = false;         // InitSequence for processWebstream and processLokalFile
     bool     m_f_firstLoop = false;         // InitSequence in loop()
-    bool     m_f_firstCurTimeCall = false;  // InitSequence for calculateAudioTime
     bool     m_f_firstPlayCall = false;     // InitSequence for playAudioData
-    bool     m_f_firstM3U8call = false;     // InitSequence for m3u8 parsing
     bool     m_f_ID3v1TagFound = false;     // ID3v1 tag found
     bool     m_f_chunked = false;           // Station provides chunked transfer
     bool     m_f_firstmetabyte = false;     // True if first metabyte (counter)

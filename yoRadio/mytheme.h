@@ -1,7 +1,7 @@
 //----------------------------------------------------------------------------------------------------------------
 //    This file was generated on the website https://vip-cxema.org/
 //    Program version: 1.2.0_03.06.2025
-//    File last modified: 10:01 07.11.2025
+//    File last modified: 18:29 02.12.2025
 //----------------------------------------------------------------------------------------------------------------
 //    Project home       https://github.com/e2002/yoradio
 //    Wiki               https://github.com/e2002/yoradio/wiki
@@ -39,7 +39,7 @@
 #define COLOR_DAY_OF_W          0,255,255     /*  day of week color (DSP_ST7789, DSP_ILI9341, DSP_ILI9225)    */
 #define COLOR_DATE                255,255,255     /*  date color (DSP_ST7789, DSP_ILI9341, DSP_ILI9225)           */
 #define COLOR_HEAP              255,168,162     /*  heap string                                                 */
-#define COLOR_BUFFER            80,80,80     /*  buffer line                                                 */
+#define COLOR_BUFFER            255,200,13     /*  buffer line                                                 */
 #define COLOR_IP                 255,238,255    /*  ip address                                                  */
 #define COLOR_VOLUME_VALUE      255,238,255     /*  volume string (DSP_ST7789, DSP_ILI9341, DSP_ILI9225)        */
 #define COLOR_RSSI              255,238,255     /*  rssi                                                        */
@@ -47,7 +47,7 @@
 #define COLOR_VOLBAR_IN         255,238,255     /*  volume bar fill                                             */
 #define COLOR_DIGITS            255,238,255     /*  volume / station number                                     */
 #define COLOR_DIVIDER             255,232,255     /*  divider color (DSP_ST7789, DSP_ILI9341, DSP_ILI9225)        */
-#define COLOR_BITRATE           0,255,255     /*  bitrate                                                     */
+#define COLOR_BITRATE           255,255,125     /*  bitrate                                                     */
 #define COLOR_PL_CURRENT          0,0,0     /*  playlist current item                                       */
 #define COLOR_PL_CURRENT_BG      255,255,255     /*  playlist current item background                            */
 #define COLOR_PL_CURRENT_FILL    255,255,255     /*  playlist current item fill background                       */

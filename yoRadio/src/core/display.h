@@ -19,6 +19,7 @@ class NumWidget;
 class ClockWidget;
 class DateWidget;
 class TextWidget;
+class WeatherIconWidget;
     
 class Display {
   public:
@@ -60,6 +61,7 @@ class Display {
     NumWidget *_nums;
     ClockWidget *_clock;
     DateWidget *_date;
+    WeatherIconWidget *_weatherIcon = nullptr;
     Page *_boot;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
     bool _locked = false;
@@ -70,6 +72,7 @@ class Display {
     void _drawPlaylist();
     void _volume();
     void _title();
+    void _utf8_clean(char *s);  //"módosítás"
     void _station();
     void _drawNextStationNum(uint16_t num);
     void _createDspTask();

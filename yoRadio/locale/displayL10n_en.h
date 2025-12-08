@@ -73,18 +73,24 @@ const char        apSettFmt[]    PROGMEM = "SETTINGS PAGE ON: HTTP://%s/";
 const char weatherFmt[] PROGMEM = "%.1f\011C  \007  %d hPa  \007  %d%% RH";
 #else
 #if EXT_WEATHER
-// EU standards
-const char       weatherFmt[]    PROGMEM = "%s, %.1f\011C \007 feels like: %.1f\011C \007 pressure: %d hPa \007 humidity: %d%% \007 wind: %.1f km/h [%s]";
-// US standards
-//const char       weatherFmt[]    PROGMEM = "%s, %.1f\011F \007 feels like: %.1f\011F \007 pressure: %d inHg \007 humidity: %d%% \007 wind: %.1f mph [%s]";
+ #ifdef IMPERIALUNIT
+ const char       weatherFmt[]    PROGMEM = "%s, %.1f\011F \007 feels like: %.1f\011F \007 pressure: %d inHg \007 humidity: %d%% \007 wind: %.1f mph [%s]";
+ #else
+ const char       weatherFmt[]    PROGMEM = "%s, %.1f\011C \007 feels like: %.1f\011C \007 pressure: %d hPa \007 humidity: %d%% \007 wind: %.1f km/h [%s]";
+ #endif
 #else
-// EU Standards
-const char       weatherFmt[]    PROGMEM = "%s, %.1f\011C \007 pressure: %d hPa \007 humidity: %d%%";
-// US Standards
-//const char       weatherFmt[]    PROGMEM = "%s, %.1f\011F \007 pressure: %d inHg \007 humidity: %d%%";
+ #ifdef IMPERIALUNIT
+ const char       weatherFmt[]    PROGMEM = "%s, %.1f\011F \007 pressure: %d inHg \007 humidity: %d%%";
+ #else
+ const char       weatherFmt[]    PROGMEM = "%s, %.1f\011C \007 pressure: %d hPa \007 humidity: %d%%";
+ #endif
 #endif
 #endif
+#ifdef IMPERIALUNIT
+const char     weatherUnits[]    PROGMEM = "imperial";   /* standard, metric, imperial */
+#else
 const char     weatherUnits[]    PROGMEM = "metric";   /* standard, metric, imperial */
+#endif
 const char      weatherLang[]    PROGMEM = "en";       /* https://openweathermap.org/current#multi */
 
 #endif

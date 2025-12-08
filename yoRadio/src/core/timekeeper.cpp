@@ -67,6 +67,7 @@ TimeKeeper::TimeKeeper() {
   forceTimeSync = true;
   _returnPlayerTime = _doAfterTime = 0;
   weatherBuf = NULL;
+  weatherIcon[0] = 0;
 #if (DSP_MODEL != DSP_DUMMY || defined(USE_NEXTION)) && !defined(HIDE_WEATHER)
   weatherBuf = (char *)malloc(sizeof(char) * WEATHER_STRING_L);
   memset(weatherBuf, 0, WEATHER_STRING_L);
@@ -367,6 +368,9 @@ bool _getWeather() {
             cursor = strstr(line, "\"icon\":\"");
             if (cursor) {
               sscanf(cursor, "\"icon\":\"%4[^\"]", icon);
+                //ikon mentése
+                strncpy(timekeeper.weatherIcon, icon, sizeof(timekeeper.weatherIcon) - 1);
+                timekeeper.weatherIcon[sizeof(timekeeper.weatherIcon) - 1] = '\0';
             } else {
               Serial.println("##WEATHER###: icon not found !");
               result = false;
@@ -374,6 +378,8 @@ bool _getWeather() {
             cursor = strstr(line, "\"temp\":");
             if (cursor) {
               sscanf(cursor, "\"temp\":%f", &tempf);
+              timekeeper.tempC = tempf;
+              timekeeper.hasTemp = true;
             } else {
               Serial.println("##WEATHER###: temp not found !");
               result = false;
@@ -421,14 +427,15 @@ bool _getWeather() {
             if (press_corr < 800 || press_corr > 1200) {
                 press_corr = press;
             }
-
+ #ifdef IMPERIALUNIT
+// US Standard
+            press = press_corr * 0.02953f;         // hPa → inHg
+            wind_speed = wind_speed * 2.23694f; // m/s → mph
+#else
 // EU standard
             press = (int)roundf(press_corr);   //hPa correction with Elevation
             wind_speed = wind_speed * 3.6f; //km/h ---- original: wind_speed (m/s)
-// US Standard
-//          press = press_corr * 0.02953f;         // hPa → inHg
-//          wind_speed = wind_speed * 2.23694f; // m/s → mph
-
+#endif
             if (!result) {
               return;
             }

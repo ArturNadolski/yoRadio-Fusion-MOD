@@ -74,10 +74,10 @@ const ProgressConfig bootPrgConf  PROGMEM = { 90, 14, 4 };
 //const BitrateConfig fullbitrateConf PROGMEM = {{DSP_WIDTH-TFT_FRAMEWDT-36, 36, 2, WA_LEFT}, 42 };
 inline BitrateConfig getfullbitrateConf() {
   switch (config.store.vuLayout) {
-    case 1: return {{TFT_FRAMEWDT+20, 110, 3, WA_LEFT}, 68 };  // Streamline
-    case 2: return {{TFT_FRAMEWDT+20, 110, 3, WA_LEFT}, 68 };  // Boombox
-    case 3: return {{TFT_FRAMEWDT+20, 110, 3, WA_LEFT}, 68 };  // Studio
-    default: return {{DSP_WIDTH-TFT_FRAMEWDT-40, 150, 2, WA_LEFT}, 45 }; // Default
+    case 1: return {{TFT_FRAMEWDT+5, 170, 2, WA_LEFT}, 45 };  // Streamline
+    case 2: return {{TFT_FRAMEWDT+5, 170, 2, WA_LEFT}, 45 };  // Boombox
+    case 3: return {{TFT_FRAMEWDT+5, 170, 2, WA_LEFT}, 45 };  // Studio
+    default: return {{DSP_WIDTH-TFT_FRAMEWDT-100, 105, 2, WA_RIGHT}, 45 }; // Default
   }
 }
 
@@ -105,16 +105,26 @@ inline WidgetConfig getvuConf() {
 //const WidgetConfig  clockConf     PROGMEM = { 50, 158, 70, WA_RIGHT };  /* 52 is a fixed font size. do not change */
 inline WidgetConfig getclockConf() {
   switch (config.store.vuLayout) {
-    case 1: return { TFT_FRAMEWDT+10, 173, 70, WA_RIGHT };  // 10 - 173 Streamline
+    case 1: return { TFT_FRAMEWDT+10, 173, 70, WA_RIGHT };  // Streamline
     case 2: return { TFT_FRAMEWDT+10, 173, 70, WA_RIGHT };  // Boombox
     case 3: return { TFT_FRAMEWDT+10, 173, 70, WA_RIGHT };  // Studio
-    default: return { TFT_FRAMEWDT+45, 203, 70, WA_RIGHT }; // Default
+    default: return { TFT_FRAMEWDT+65, 203, 70, WA_RIGHT }; // Default
+  }
+}
+
+//WeatherIconConf
+inline WidgetConfig getWeatherIconConf() {
+  switch (config.store.vuLayout) {
+    case 1: return { TFT_FRAMEWDT+8, 102, 2, WA_LEFT };  // Streamline
+    case 2: return { TFT_FRAMEWDT+8, 102, 2, WA_LEFT };  // Boombox
+    case 3: return { TFT_FRAMEWDT+8, 102, 2, WA_LEFT };  // Studio
+    default: return { DSP_WIDTH-TFT_FRAMEWDT-65, 150, 2, WA_RIGHT }; // Default
   }
 }
 
 //const ScrollConfig dateConf       PROGMEM = {{ DSP_WIDTH-TFT_FRAMEWDT, 185, 2, WA_RIGHT }, 128, false, 220, 5000, 1, 50};
 static constexpr ScrollConfig kDateBase = {
-  { TFT_FRAMEWDT+45, 210, 2, WA_RIGHT }, 128, false, 304, 5000, 1, 50 };
+  { TFT_FRAMEWDT+65, 210, 2, WA_RIGHT }, 128, false, 304, 5000, 1, 50 };
 
 static inline uint16_t dateTopByLayout(uint8_t ly) {
   switch (ly) {
@@ -130,7 +140,7 @@ static inline uint16_t dateLeftByLayout(uint8_t ly) {
     case 1:  return TFT_FRAMEWDT+10;              // StreamLine
     case 2:  return TFT_FRAMEWDT+10;              // BoomBox
     case 3:  return TFT_FRAMEWDT+10;              // Studio
-    default: return TFT_FRAMEWDT+45;              // Default
+    default: return TFT_FRAMEWDT+65;              // Default
   }
 }
 
@@ -159,7 +169,7 @@ inline MoveConfig getclockMove() {
     case 1: return { TFT_FRAMEWDT+10, 173, -1 };  // Streamline
     case 2: return { TFT_FRAMEWDT+10, 173, -1 };  // Boombox
     case 3: return { TFT_FRAMEWDT+10, 173, -1 };  // Studio
-    default: return { TFT_FRAMEWDT+45, 203, -1 }; // Default
+    default: return { TFT_FRAMEWDT+65, 203, -1 }; // Default
   }
 }
 

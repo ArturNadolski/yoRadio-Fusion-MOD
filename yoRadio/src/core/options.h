@@ -484,10 +484,14 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 
 #define EN  1
 #define RU  2
-#define HU  3
-#define PL  4
-#define NL  5
-#define EL  6
+#define HU  3  // Módosítás plussz sor "multi_language"
+#define PL  4  // Módosítás plussz sor "multi_language"
+#define LANG_NL  5  // Módosítás plussz sor "multi_language"
+#define GR  6  // Módosítás plussz sor Görög "multi_language"
+#define CZ  7  // Módosítás plussz sor "multi_language"
+#define SK  8  // Módosítás plussz sor "multi_language"
+#define UA  9
+#define DE  10
 #ifndef L10N_LANGUAGE
   #define L10N_LANGUAGE EN
 #endif

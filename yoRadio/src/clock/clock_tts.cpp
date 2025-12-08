@@ -162,6 +162,11 @@ void clock_tts_task_func(void *param) {
           clock_tts_prev_volume  = player.getVolume();
           clock_lastMinute       = tm_info->tm_min;
 
+          if (!allowDuring && playerWasRunning) {
+              ttsState = TTS_IDLE;
+              break;
+          }
+
           if (allowDuring && playerWasRunning)
             doFadeDownStart();
 

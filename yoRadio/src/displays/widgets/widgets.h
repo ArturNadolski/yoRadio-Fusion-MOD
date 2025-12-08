@@ -309,6 +309,23 @@ private:
   bool _namedayEnabled = true;
 };
 
+class WeatherIconWidget : public Widget {
+  public:
+    using Widget::init;
+
+    void init(WidgetConfig wconf, uint16_t bgcolor);
+    void setIcon(const char* code);
+    void setTemp(float tempC);
+
+  protected:
+    const uint16_t* _img = nullptr;
+    uint16_t _iw = 0, _ih = 0;
+    char _temp[8] = {0};
+    bool _hasTemp = false;
+    void _draw() override;
+    void _clear() override;
+};
+
 #endif
 #endif
 

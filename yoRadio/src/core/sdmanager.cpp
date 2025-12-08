@@ -11,9 +11,12 @@
 #include "display.h"
 #include "player.h"
 
-#if defined(SD_SPIPINS) || SD_HSPI
-SPIClass  SDSPI(HSPI);
-#define SDREALSPI SDSPI
+#if defined(SD_SPIPINS)
+  SPIClass  SDSPI(VSPI);
+  #define SDREALSPI SDSPI
+#elif SD_HSPI
+  SPIClass  SDSPI(HSPI);
+  #define SDREALSPI SDSPI
 #else
   #define SDREALSPI SPI
 #endif
@@ -25,6 +28,12 @@ SPIClass  SDSPI(HSPI);
 SDManager sdman(FSImplPtr(new VFSImpl()));
 
 bool SDManager::start(){
+  #if defined(SD_SPIPINS)
+    SDREALSPI.begin(SD_SPIPINS, SDC_CS);
+  #elif SD_HSPI
+    SDREALSPI.begin();
+  #endif
+
   ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
   vTaskDelay(10);
   if(!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
