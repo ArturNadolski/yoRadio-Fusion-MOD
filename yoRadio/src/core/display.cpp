@@ -215,8 +215,8 @@ void Display::_buildPager(){
   _nums->init(numConf, 10, false, config.theme.digit, config.theme.background);
   #ifndef HIDE_WEATHER
     _weather = new ScrollWidget("\007", weatherConf, config.theme.weather, config.theme.background);
-    _weatherIcon  = new WeatherIconWidget();
    #if DSP_MODEL==DSP_ILI9488 || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_NV3041A || DSP_MODEL==DSP_ST7796 || DSP_MODEL==DSP_ILI9341 || DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7789_170
+    _weatherIcon  = new WeatherIconWidget();
     _weatherIcon->init(getWeatherIconConf(), config.theme.background);
    #endif
   #endif
