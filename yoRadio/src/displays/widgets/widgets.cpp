@@ -94,7 +94,7 @@ static void formatDateCustom(char* out, size_t outlen, const tm& t, uint8_t fmt)
         break;
 
       case 3: // Tue, 16 September 2025  
-        snprintf(out, outlen, "%s, %d. %s %d", dow, t.tm_mday, month, y);
+        snprintf(out, outlen, "%s, %d %s %d", dow, t.tm_mday, month, y);
         break;
 
       case 4: // Tue - 16.09. 
@@ -1173,8 +1173,8 @@ void ClockWidget::_printClock(bool force){
         int16_t hlineY  = secBaseY + secCellH;
         if (hlineY >= _top()) hlineY = _top() - 1;
     #ifdef AM_PM_STYLE
-        gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
-        gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
+        //gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
+        //gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
         gfx.setFont();
         gfx.setTextSize(2);
         if(TIME_SIZE==70) {
@@ -1191,8 +1191,8 @@ void ClockWidget::_printClock(bool force){
         strftime(buf, sizeof(buf), "%p", &network.timeinfo);
         gfx.print(buf);  // AM vagy PM kiírása
     #else
-        gfx.drawFastVLine(_linesleft, secBaseY, _top() - secBaseY , config.theme.div);
-        gfx.drawFastHLine(_linesleft, hlineY + _space/2, CHARWIDTH * _superfont * 2 + _space, config.theme.div);
+        //gfx.drawFastVLine(_linesleft, secBaseY, _top() - secBaseY , config.theme.div);
+        //gfx.drawFastHLine(_linesleft, hlineY + _space/2, CHARWIDTH * _superfont * 2 + _space, config.theme.div);
     #endif
         formatDateCustom(_tmp, sizeof(_tmp), ti, config.store.dateFormat);
         #ifndef HIDE_DATE

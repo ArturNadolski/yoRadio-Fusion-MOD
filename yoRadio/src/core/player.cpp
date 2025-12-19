@@ -141,6 +141,7 @@ void Player::_stop(bool alreadyStopped){
   if (config.getMode() == PM_SDCARD && !alreadyStopped) {
     config.sdResumePos = player.getAudioFilePosition();
     config.stopedSdStationId = config.lastStation();
+    Serial.printf("[SD] Zapisano pozycję: %u dla stacji: %d\n", config.sdResumePos, config.stopedSdStationId);
   }
   _status = STOPPED;
   setOutputPins(false);
@@ -184,13 +185,38 @@ void resetPlayer(){
   #define PL_QUEUE_TICKS_ST 15
 #endif
 void Player::loop() {
-  if(playerQueue==NULL) return;
+  if (playerQueue == NULL) return;
+
+  // --- START: MECHANIZM BEZPIECZNEGO SKOKU (SAFE RESUME) ---
+  // Uruchamia się tylko, gdy mamy zaplanowaną pozycję i dekoder już gra
+  if (_pendingResumePos > 0 && isRunning()) {
+    // Czekamy, aż getAudioCurrentTime() > 0. 
+    // To gwarantuje, że dekoder FLAC/MP3 przeszedł przez nagłówki i podaje dźwięk.
+    if (getAudioCurrentTime() > 0) { 
+      Serial.printf("[SD] Dekoder aktywny (Czas: %d s). Wykonuję skok do bajtu: %u\n", getAudioCurrentTime(), _pendingResumePos);
+      
+      // Wykonujemy fizyczny skok w pliku
+      //setAudioFilePosition(_pendingResumePos);
+      // Opcjonalna korekta, jeśli chcesz, by radio wracało o np. 1 sekundę wcześniej
+      // (lepsze wrażenie ciągłości dla słuchacza)
+      setAudioFilePosition(_pendingResumePos > 20000 ? _pendingResumePos - 20000 : _pendingResumePos);
+      
+      // Po wykonaniu skoku czyścimy flagi, aby nie zapętlić skakania
+      _pendingResumePos = 0;
+      config.sdResumePos = 0; 
+    }
+  }
+  // --- KONIEC: MECHANIZM BEZPIECZNEGO SKOKU ---
+
   playerRequestParams_t requestP;
-  if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
-    switch (requestP.type){
-      case PR_STOP: _stop(); break;
+  // Odbieranie komend z kolejki (Play, Stop, Vol)
+  if (xQueueReceive(playerQueue, &requestP, isRunning() ? PL_QUEUE_TICKS : PL_QUEUE_TICKS_ST)) {
+    switch (requestP.type) {
+      case PR_STOP: 
+        _stop(); 
+        break;
       case PR_PLAY: {
-        if (requestP.payload>0) {
+        if (requestP.payload > 0) {
           config.setLastStation((uint16_t)requestP.payload);
         }
         _play((uint16_t)abs(requestP.payload)); 
@@ -207,59 +233,54 @@ void Player::loop() {
         Audio::setVolume(volToI2S(requestP.payload));
         break;
       }
-      #ifdef USE_SD
+#ifdef USE_SD
       case PR_CHECKSD: {
-        if(config.getMode()==PM_SDCARD){
-          if(!sdman.cardPresent()){
+        if (config.getMode() == PM_SDCARD) {
+          if (!sdman.cardPresent()) {
             sdman.stop();
             config.changeMode(PM_WEB);
           }
         }
         break;
       }
-      #endif
+#endif
       case PR_VUTONUS: {
-        if(config.vuThreshold>10) config.vuThreshold -=10;
+        if (config.vuThreshold > 10) config.vuThreshold -= 10;
         break;
       }
       case PR_BURL: {
-      #ifdef MQTT_ROOT_TOPIC
-        if(strlen(burl)>0){
+#ifdef MQTT_ROOT_TOPIC
+        if (strlen(burl) > 0) {
           browseUrl();
         }
-      #endif
+#endif
         break;
       }
-          
       default: break;
     }
   }
-  checkAutoStartStop();   /* ----- Auto On-Off Timer ----- */
-  Audio::loop();
 
+  checkAutoStartStop(); // Timer automatycznego włączania/wyłączania
+  Audio::loop();        // Główna pętla biblioteki audio (dekodowanie danych)
+
+  // Obsługa zakończenia utworu lub nieoczekiwanego zatrzymania
   if (!isRunning() && _status == PLAYING) {
     _stop(true);
-     if (config.getMode() == PM_SDCARD) {
-      if (player.getAudioFilePosition() == 0) {  // Csak akkor next(), ha a fájl ténylegesen lejárt
+    if (config.getMode() == PM_SDCARD) {
+      // Zapobieganie przeskokowi, jeśli właśnie próbujemy wznowić (Safe Seek)
+      if (getAudioFilePosition() == 0 && _pendingResumePos == 0) { 
         next();
       }
     }
   }
 
-  if(_volTimer){
-    if((millis()-_volTicks)>3000){
+  // Timer zapisu głośności do pamięci (po 3 sekundach od ostatniej zmiany)
+  if (_volTimer) {
+    if ((millis() - _volTicks) > 3000) {
       config.saveVolume();
-      _volTimer=false;
+      _volTimer = false;
     }
   }
-  
-  
-  /*
-#ifdef MQTT_ROOT_TOPIC
-  if(strlen(burl)>0){
-    browseUrl();
-  }
-#endif*/
 }
 
 void Player::setOutputPins(bool isPlaying) {
@@ -281,8 +302,20 @@ void Player::_play(uint16_t stationId) {
   
   bool isConnected = false;
   if(config.getMode()==PM_SDCARD && SDC_CS!=255){
-    // A connecttoFS NEM támogat start offsetet SD-n → -1, indítás pozícionálás nélkül.
+  // Jeśli to było wznowienie po zegarze, dajmy systemowi 100ms na przełączenie buforów
+    if (config.stopedSdStationId == stationId && config.sdResumePos > 0) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    
     isConnected = connecttoFS(sdman, config.station.url, -1);
+    
+    if (isConnected && config.stopedSdStationId == stationId && config.sdResumePos > 0) {
+        _pendingResumePos = config.sdResumePos;
+        // config.sdResumePos = 0; // Na razie nie zeruj tutaj, zrobimy to po udanym skoku
+        Serial.printf("[SD] Zaplanowano bezpieczny skok do: %u\n", _pendingResumePos);
+    } else {
+        _pendingResumePos = 0;
+    }
   }else {
     config.saveValue(&config.store.play_mode, static_cast<uint8_t>(PM_WEB));
   }

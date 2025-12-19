@@ -49,6 +49,7 @@ void my_audio_info(Audio::msg_t m) {
   // Kiíratás a sorosra (debug)
   Serial.printf("##AUDIO -> m.s  : %s\n", m.s);
   Serial.printf("##AUDIO -> m.msg: %s\n", m.msg);
+  
   if (m.s == nullptr || m.msg == nullptr) {
     return;
   }
@@ -57,10 +58,9 @@ void my_audio_info(Audio::msg_t m) {
   }
 
   // Az üzenet típusától függően hívjuk meg a megfelelő feldolgozót
-
   if (strcmp(m.s, "info") == 0) {  // Ha egyezik
     // Formátum felismerés
-    if (strstr(m.msg, "MPEG-1 Layer III") != NULL) {  // Ha tartalmazza.
+    if (strstr(m.msg, "MPEG-1 Layer III") != NULL) {
       config.setBitrateFormat(BF_MP3);
       display.putRequest(DBITRATE);
     } else if (strstr(m.msg, "AAC") != NULL) {
@@ -80,26 +80,23 @@ void my_audio_info(Audio::msg_t m) {
       display.putRequest(DBITRATE);
     } else if (strstr(m.msg, "stream ready") != NULL) {
       seekSD();
-    } else if (strstr(m.msg, "Audio-Data-Start:") != NULL) {  // Audio-Data-Start feldolgozás
+    } else if (strstr(m.msg, "Audio-Data-Start:") != NULL) {
       player.sd_min = atoi(m.msg + strlen("Audio-Data-Start:"));
-    } else if (strstr(m.msg, "Audio-Length:") != NULL) {  // Audio-Length feldolgozás. A WEB fájlpozíció sliderhez kell.
+    } else if (strstr(m.msg, "Audio-Length:") != NULL) {
       uint32_t audioLength = atoi(m.msg + strlen("Audio-Length:"));
-      player.sd_max = player.sd_min + audioLength;  // A teljes audio fájl hossza.
-      // A slider tartomány küldése a webnek.
+      player.sd_max = player.sd_min + audioLength;
       netserver.requestOnChange(SDLEN, 0);
     }
   }
 
-  /****  MP3 ****/
+  /**** MP3 & FLAC Tagi (id3data) ****/
   if (strcmp(m.s, "id3data") == 0) {
     if (strstr(m.msg, "Track:") != NULL) {
       currentStationId = atoi(m.msg + strlen("Track:"));
     }
-    if (strstr(m.msg, "Artist") != NULL) {
-      if (printable(m.msg)) {
-        processID3(m.msg);
-      }
-    } else if (strstr(m.msg, "Title") != NULL) {
+    
+    // Zmiana: strcasestr pozwala wykryć "Artist", "ARTIST", "Title", "TITLE"
+    if (strcasestr(m.msg, "Artist") != NULL || strcasestr(m.msg, "Title") != NULL) {
       if (printable(m.msg)) {
         processID3(m.msg);
       }
@@ -114,39 +111,38 @@ void my_audio_info(Audio::msg_t m) {
   if (strstr(m.msg, "Account already in use") != NULL || strstr(m.msg, "HTTP/1.0 401") != NULL) {
     player.setError(m.msg);
   }
-  // A bitrate üzenet. ✅
+  
   if (strcmp(m.s, "bitrate") == 0) {
     audio_bitrate(m.msg);
   }
-  // Az állomás nevének kiolvasása. ✅
+  
   if (strcmp(m.s, "station_name") == 0 || strcmp(m.s, "icy-name") == 0) {
       if (printable(m.msg)) {
   #ifndef MetaStationNameSkip
-        // csak akkor engedjük, ha nincs tiltva meta station név
         config.setStation(m.msg);
         display.putRequest(NEWSTATION);
         netserver.requestOnChange(STATION, 0);
   #endif
       }
   }
-  // Streamtitle kiolvasása. ✅
+
   if (strcmp(m.s, "streamtitle") == 0 || strcmp(m.s, "StreamTitle") == 0) {
      if (!m.msg || strlen(m.msg)==0) {
-        // fallback → station name
         config.setTitle(config.station.name);
      } else {
         audio_id3album(m.msg);
      }
   }
+
+  // Wysyłamy żądanie odświeżenia tytułu do wyświetlacza i serwera WWW
   display.putRequest(NEWTITLE);
   netserver.requestOnChange(TITLE, 0);
-  // icy-name kiolvasása
+
   const char *ici;
   if ((ici = strstr(m.msg, "icy-name: ")) != NULL) {
     char icyName[BUFLEN] = {0};
     safeStrCopy(icyName, ici + strlen("icy-name: "), sizeof(icyName));
 #ifdef NAME_STRIM
-    // ha kell, vágjuk le a " - " után jövő részt
     char *dash = strstr(icyName, " - ");
     if (dash) {
       *dash = '\0';
@@ -159,14 +155,14 @@ void my_audio_info(Audio::msg_t m) {
 #endif
     audio_id3album(icyName);
   }
-  // Zenei stílus kiolvasása POP stb. ✅
+
   if (strcmp(m.s, "icy-genre") == 0) {
     if (config.store.audioinfo) {}
   }
-  if (strcmp(m.s, "icy_url") == 0 || strcmp(m.s, "icy-url") == 0) {  //✅
+  if (strcmp(m.s, "icy_url") == 0 || strcmp(m.s, "icy-url") == 0) {
     if (config.store.audioinfo) {}
   }
-  if (strcmp(m.s, "icy_description") == 0) {  // ✅
+  if (strcmp(m.s, "icy_description") == 0) {
     if (config.store.audioinfo) {
       audio_icy_description(m.msg);
     }
@@ -187,22 +183,43 @@ void seekSD() {
 
 void processID3(const char *msg) {
   bool updated = false;
+  String message = String(msg);
+  int separatorPos = -1;
 
-  if (strstr(msg, "Artist") != NULL) {
-    currentArtist = String(msg).substring(8);  // "Artist: " hossz = 8
-    updated = true;
-  } else if (strstr(msg, "Title") != NULL) {
-    currentTitle = String(msg).substring(7);  // "Title: " hossz = 7
-    updated = true;
+  // Sprawdzamy Artist / ARTIST
+  if (message.indexOf("Artist") != -1 || message.indexOf("ARTIST") != -1) {
+    separatorPos = message.indexOf(":");
+    if (separatorPos == -1) separatorPos = message.indexOf("="); // Dla FLAC
+    
+    if (separatorPos != -1) {
+      currentArtist = message.substring(separatorPos + 1);
+      currentArtist.trim(); // Usuwamy zbędne spacje
+      updated = true;
+    }
+  } 
+  // Sprawdzamy Title / TITLE
+  else if (message.indexOf("Title") != -1 || message.indexOf("TITLE") != -1) {
+    separatorPos = message.indexOf(":");
+    if (separatorPos == -1) separatorPos = message.indexOf("="); // Dla FLAC
+    
+    if (separatorPos != -1) {
+      currentTitle = message.substring(separatorPos + 1);
+      currentTitle.trim();
+      updated = true;
+    }
   }
-  // Ha volt frissítés, küldjük el a jelenlegi állapotot
+
+  // Jeśli była aktualizacja, budujemy napis "Artysta - Tytuł"
   if (updated) {
-    String info;
+    String info = "";
     if (currentArtist.length() > 0 && currentTitle.length() > 0) {
       info = currentArtist + " - " + currentTitle;
     } else if (currentArtist.length() > 0) {
-      info = currentArtist + " -  ";  // cím még nincs
+      info = currentArtist;
+    } else if (currentTitle.length() > 0) {
+      info = currentTitle;
     }
+    
     if (info.length() > 0) {
       config.setTitle(info.c_str());
     }

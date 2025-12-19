@@ -63,18 +63,35 @@ bool doFadeUpStep() {
 }
 
 static inline void clock_tts_announcement(char* buf, size_t buflen, int hour, int min, const char* lang) {
-  if (strncmp(lang, "en", 2) == 0)
-    snprintf(buf, buflen, "The time is %d:%02d.", hour, min);
-  else if (strncmp(lang, "de", 2) == 0)
-    snprintf(buf, buflen, "Es ist %d:%02d Uhr.", hour, min);
-  else if (strncmp(lang, "ru", 2) == 0)
+  if (strncmp(lang, "PL", 2) == 0) {
+    snprintf(buf, buflen, "Jest %d:%02d.", hour, min);
+  } else if (strncmp(lang, "HU", 2) == 0) {
+    snprintf(buf, buflen, "Az idő %d:%02d.", hour, min);
+  } else if (strncmp(lang, "RU", 2) == 0) {
     snprintf(buf, buflen, "Сейчас %d:%02d.", hour, min);
-  else if (strncmp(lang, "ro", 2) == 0)
+  } else if (strncmp(lang, "DE", 2) == 0) {
+    snprintf(buf, buflen, "Es ist %d Uhr %02d.", hour, min);
+  } else if (strncmp(lang, "FR", 2) == 0) {
+    snprintf(buf, buflen, "Il est %d:%02d.", hour, min);
+  } else if (strncmp(lang, "EL", 2) == 0) {
+    snprintf(buf, buflen, "I ora einai %d:%02d.", hour, min);
+  } else if (strncmp(lang, "GR", 2) == 0) {
+    snprintf(buf, buflen, "I ora einai %d:%02d.", hour, min);
+  } else if (strncmp(lang, "RO", 2) == 0) {
     snprintf(buf, buflen, "Este ora %d:%02d.", hour, min);
-  else if (strncmp(lang, "hu", 2) == 0)
-    snprintf(buf, buflen, "A pontos idő %d:%02d.", hour, min);
-  else
+  } else if (strncmp(lang, "NL", 2) == 0) {
+    snprintf(buf, buflen, "De tijd %d:%02d.", hour, min);
+  } else if (strncmp(lang, "SK", 2) == 0) {
+    snprintf(buf, buflen, "Čas je %d:%02d.", hour, min);
+  } else if (strncmp(lang, "UA", 2) == 0) {
+    snprintf(buf, buflen, "Час %d:%02d.", hour, min);
+  } else if (strncmp(lang, "IT", 2) == 0) {
+    snprintf(buf, buflen, "Sono le %d:%02d.", hour, min);
+  } else if (strncmp(lang, "PT", 2) == 0) {
+    snprintf(buf, buflen, "São %d:%02d.", hour, min);
+  } else {
     snprintf(buf, buflen, "The time is %d:%02d.", hour, min);
+  }
 }
 
 void clock_tts_setup() {
@@ -195,6 +212,11 @@ void clock_tts_task_func(void *param) {
 
         if (millis() - ttsStepStart >= 150) {
 
+          if (playerWasRunning && config.getMode() == PM_SDCARD) {
+            // Wywołujemy stop, co wymusi zapisanie pozycji w config.sdResumePos
+            player._stop(false); 
+          }
+
           player.lockOutput = true;
 
           clock_tts_announcement(ttsBuffer, sizeof(ttsBuffer),
@@ -246,11 +268,19 @@ void clock_tts_task_func(void *param) {
           fadeStart = true;
         }
 
-        if (!streamRestart && !player.isRunning()) {
-          player.lockOutput = false;
-          player.sendCommand({PR_PLAY, config.lastStation()});
-          streamRestart = true;
-        }
+if (!streamRestart && !player.isRunning()) {
+        // 1. Najpierw całkowicie czyścimy blokady
+        player.lockOutput = false; 
+        
+        // 2. Jeśli używasz zewnętrznych pinów wyciszania (Mute)
+        player.setOutputPins(true); 
+        
+        // 3. Startujemy odtwarzanie (wywoła Twoje _play ze skokiem)
+        player.sendCommand({PR_PLAY, config.lastStation()});
+        
+        streamRestart = true;
+        log_i("TTS_FADE_UP: Wyjście odblokowane, wysłano PR_PLAY");
+    }
 
         if (doFadeUpStep()) {
           player.setVolume(clock_tts_prev_volume);

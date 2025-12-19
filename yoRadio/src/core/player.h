@@ -28,7 +28,6 @@ class Player: public Audio {
     plStatus_e  _status;
     //char        _plError[PLERR_LN];
   private:
-    void _stop(bool alreadyStopped = false);
     void _play(uint16_t stationId);
     void _loadVol(uint8_t volume);
     bool _hasError;
@@ -37,6 +36,7 @@ class Player: public Audio {
     bool resumeAfterUrl = false;
     volatile bool connproc = true;
     uint32_t sd_min, sd_max;
+    uint32_t _pendingResumePos = 0;
     #ifdef MQTT_ROOT_TOPIC
     char      burl[MQTT_BURL_SIZE];  /* buffer for browseUrl  */
     #endif
@@ -65,6 +65,7 @@ class Player: public Audio {
     void stopInfo();
     void setOutputPins(bool isPlaying);
     void setResumeFilePos(uint32_t pos) { _resumeFilePos = pos; }
+    void _stop(bool alreadyStopped = false);
 };
 
 extern Player player;

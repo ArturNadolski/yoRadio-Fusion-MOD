@@ -366,6 +366,9 @@ void Display::_swichMode(displayMode_e newmode) {
     //nextion.swichMode(newmode);
     nextion.putRequest({NEWMODE, newmode});
   #endif
+  #ifdef HIDE_VOLPAGE
+    if (newmode == VOL) return; 
+  #endif
 if (newmode == _mode || 
     (network.status != CONNECTED && network.status != SDREADY)) return;
 
@@ -437,7 +440,7 @@ if (newmode == _mode ||
   }
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
   if (newmode == UPDATING)  _showDialog(LANG::const_DlgUpdate);
-  if (newmode == SLEEPING)  _showDialog("SLEEPING");
+  if (newmode == SLEEPING)  _showDialog(LANG::const_DlgSleeping);
   if (newmode == SDCHANGE)  _showDialog(LANG::const_waitForSD);
   if (newmode == INFO || newmode == SETTINGS || newmode == TIMEZONE || newmode == WIFI) _showDialog(LANG::const_DlgNextion);
   if (newmode == NUMBERS) _showDialog("");

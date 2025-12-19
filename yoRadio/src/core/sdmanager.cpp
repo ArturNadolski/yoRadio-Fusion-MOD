@@ -3,19 +3,20 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
+#include <vector>
+#include <algorithm>
 #include "vfs_api.h"
 #include "sd_diskio.h"
-//#define USE_SD
 #include "config.h"
 #include "sdmanager.h"
 #include "display.h"
 #include "player.h"
 
 #if defined(SD_SPIPINS)
-  SPIClass  SDSPI(VSPI);
+  SPIClass SDSPI(VSPI);
   #define SDREALSPI SDSPI
 #elif SD_HSPI
-  SPIClass  SDSPI(HSPI);
+  SPIClass SDSPI(HSPI);
   #define SDREALSPI SDSPI
 #else
   #define SDREALSPI SPI
@@ -26,6 +27,11 @@
 #endif
 
 SDManager sdman(FSImplPtr(new VFSImpl()));
+
+// Case-insensitive comparison for sorting
+bool compareAlpha(const String& a, const String& b) {
+    return strcasecmp(a.c_str(), b.c_str()) < 0;
+}
 
 bool SDManager::start(){
   #if defined(SD_SPIPINS)
@@ -48,35 +54,35 @@ void SDManager::stop(){
   end();
   ready = false;
 }
+
 #include "diskio_impl.h"
 bool SDManager::cardPresent() {
-
   if(!ready) return false;
-  if(sectorSize()<1) {
-    return false;
-  }
-  uint8_t buff[sectorSize()] = { 0 };
+  if(sectorSize()<1) return false;
+  
+  uint8_t buff[512] = { 0 }; // Użycie standardowego rozmiaru sektora
   bool bread = readRAW(buff, 1);
-  if(sectorSize()>0 && !bread) return false;
   return bread;
 }
 
 bool SDManager::_checkNoMedia(const char* path){
+  char buf[256];
   if (path[strlen(path) - 1] == '/')
-    snprintf(config.tmpBuf, sizeof(config.tmpBuf), "%s%s", path, ".nomedia");
+    snprintf(buf, sizeof(buf), "%s%s", path, ".nomedia");
   else
-    snprintf(config.tmpBuf, sizeof(config.tmpBuf), "%s/%s", path, ".nomedia");
-  bool nm = exists(config.tmpBuf);
-  return nm;
+    snprintf(buf, sizeof(buf), "%s/%s", path, ".nomedia");
+  return exists(buf);
 }
 
-bool SDManager::_endsWith (const char* base, const char* str) {
-  int slen = strlen(str) - 1;
-  const char *p = base + strlen(base) - 1;
-  while(p > base && isspace(*p)) p--;
-  p -= slen;
-  if (p < base) return false;
-  return (strncmp(p, str, slen) == 0);
+// Szybkie sprawdzanie rozszerzeń bez modyfikacji stringa wejściowego
+bool SDManager::isAudioFile(const char* filename) {
+    const char* dot = strrchr(filename, '.');
+    if (!dot) return false;
+    return (strcasecmp(dot, ".mp3") == 0 || 
+            strcasecmp(dot, ".wav") == 0 || 
+            strcasecmp(dot, ".flac") == 0 || 
+            strcasecmp(dot, ".m4a") == 0 || 
+            strcasecmp(dot, ".aac") == 0);
 }
 
 void SDManager::listSD(File &plSDfile, File &plSDindex, const char* dirname, uint8_t levels) {
@@ -87,62 +93,97 @@ void SDManager::listSD(File &plSDfile, File &plSDindex, const char* dirname, uin
     }
     if (!root.isDirectory()) {
         Serial.println("##[ERROR]#\tNot a directory");
+        root.close();
         return;
     }
 
-    uint32_t pos = 0;
-    char* filePath;
+    std::vector<String> folderList;
+    std::vector<String> fileList;
+
+    // 1. Zbieranie nazw
     while (true) {
-        vTaskDelay(2);
-        player.loop();
         bool isDir;
-        String fileName = root.getNextFileName(&isDir);
-        if (fileName.isEmpty()) break;
-        filePath = (char*)malloc(fileName.length() + 1);
-        if (filePath == NULL) {
-            Serial.println("Memory allocation failed");
-            break;
-        }
-        strcpy(filePath, fileName.c_str());
-        const char* fn = strrchr(filePath, '/') + 1;
+        String name = root.getNextFileName(&isDir);
+        if (name.isEmpty()) break;
+
         if (isDir) {
-            if (levels && !_checkNoMedia(filePath)) {
-                listSD(plSDfile, plSDindex, filePath, levels - 1);
+            if (levels > 0 && !_checkNoMedia(name.c_str())) {
+                folderList.push_back(name);
             }
         } else {
-            if (_endsWith(strlwr((char*)fn), ".mp3") || _endsWith(fn, ".m4a") || _endsWith(fn, ".aac") ||
-                _endsWith(fn, ".wav") || _endsWith(fn, ".flac")) {
-                pos = plSDfile.position();
-                plSDfile.printf("%s\t%s\t0\n", fn, filePath);
-                plSDindex.write((uint8_t*)&pos, 4);
-                Serial.print(".");
-                if(display.mode()==SDCHANGE) display.putRequest(SDFILEINDEX, _sdFCount+1);
-                _sdFCount++;
-                if (_sdFCount % 64 == 0) Serial.println();
+            if (isAudioFile(name.c_str())) {
+                fileList.push_back(name);
             }
         }
-        free(filePath);
+        if ((folderList.size() + fileList.size()) % 50 == 0) yield();
     }
     root.close();
+
+    // 2. Sortowanie list
+    std::sort(folderList.begin(), folderList.end(), compareAlpha);
+    std::sort(fileList.begin(), fileList.end(), compareAlpha);
+
+    // 3. NAJPIERW: Rekurencyjnie wchodzimy w posortowane foldery
+    // Dzięki temu zawartość podfolderów trafi do pliku wcześniej
+    if (levels > 0) {
+        for (const String& folderPath : folderList) {
+            listSD(plSDfile, plSDindex, folderPath.c_str(), levels - 1);
+        }
+    }
+
+    // 4. NA KOŃCU: Przetwarzamy pliki w bieżącym folderze
+    // Jeśli to jest root ("/"), te pliki będą na samym dole playlisty
+    for (const String& path : fileList) {
+        const char* fullPath = path.c_str();
+        const char* fn = strrchr(fullPath, '/');
+        fn = (fn) ? fn + 1 : fullPath;
+
+        uint32_t pos = plSDfile.position();
+        plSDfile.printf("%s\t%s\t0\n", fn, fullPath);
+        plSDindex.write((uint8_t*)&pos, 4);
+
+        _sdFCount++;
+        
+        Serial.print(".");
+        if (_sdFCount % 64 == 0) Serial.println();
+        
+        if(display.mode() == SDCHANGE) display.putRequest(SDFILEINDEX, _sdFCount);
+        
+        if (_sdFCount % 5 == 0) {
+            player.loop();
+            vTaskDelay(1);
+        }
+    }
 }
 
 void SDManager::indexSDPlaylist() {
+  Serial.println("Starting SD Indexing (Sorted)...");
   _sdFCount = 0;
+  
   if(exists(PLAYLIST_SD_PATH)) remove(PLAYLIST_SD_PATH);
   if(exists(INDEX_SD_PATH)) remove(INDEX_SD_PATH);
+
   File playlist = open(PLAYLIST_SD_PATH, "w", true);
   if (!playlist) {
+    Serial.println("##[ERROR]#\tCould not create playlist file");
     return;
   }
+  
   File index = open(INDEX_SD_PATH, "w", true);
+  if (!index) {
+    Serial.println("##[ERROR]#\tCould not create index file");
+    playlist.close();
+    return;
+  }
+
   listSD(playlist, index, "/", SD_MAX_LEVELS);
+  
   index.flush();
   index.close();
   playlist.flush();
   playlist.close();
-  Serial.println();
+  
+  Serial.printf("\nIndexing complete. Found %d files.\n", _sdFCount);
   delay(50);
 }
 #endif
-
-

@@ -1,0 +1,37 @@
+display.cpp
+Dodanie opcji wyłaczenia pokazywania ekranu głośności
+HIDE_VOLPAGE
+Dodanie zmiennej do tłumaczenia
+const_DlgSleeping
+
+widgets.cpp
+Wyłącznie wyświerlania linii pionowych i poziomych pomiędzy godziną a sekundami
+gfx.drawFastVLine
+gfx.drawFastHLine
+
+audiohandlers.h
+Dodanie opcji wyświetlania metadanych przy odtwarzaniu plików FLAC z karty SD
+processID3
+my_audio_info
+
+displayL10n_pl.h
+Poprawa polskiego tłumaczenia
+
+displayL10n_pt.h
+Dodanie języka portugalskiego
+displayL10n_ro.h
+Dodanie języka rumuńskiego
+
+sdmanager.cpp/sdmanager.h
+Szybsze indeksowanie
+Sortowanie alfabetyczne najpierw foldery potem pliki
+
+clock_tts.cpp
+Poprawki obsługi języków
+Zmiany w TTS_PREPARE_SPEECH i TTS_FADE_UP związane z zatrzymywaniem odtwarzania (wywołuje zapisz aktualnej pozycji w pliku żeby potem wznowić od tego miejsca)
+
+player.cpp
+W funkcji _play i loop zmieniony związane z obsługą zatrzymania odtworzania
+
+player.h
+Przeniesienie funkcji _stop z private do public aby była widoczna dla clock_tts
